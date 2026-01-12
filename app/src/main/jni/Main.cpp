@@ -28,7 +28,9 @@ bool ESPLines = true;
 bool ESPBox = true;
 bool ESPDistance = true;
 bool ESPName = true;
-bool ESPEdgeIndicator = true;  // Yeni: Ekran dışı gösterge
+bool ESPEdgeIndicator = true;
+bool ESPHideInVote = true;
+bool ESPHideInLobby = false;
 bool DebugMode = false;
 bool DroneView = false;
 float DroneZoom = 10.0f;
@@ -38,6 +40,10 @@ float SpeedMultiplier = 1.5f;
 void *localPlayerInstance = NULL;
 void *localPlayerObject = NULL;
 void *mainCameraObject = NULL;
+bool isInVotingScreen = false;
+bool isInGame = false;
+bool isInLobby = true;
+int localPlayerRole = 0;
 
 struct Vector2 { float x, y; };
 struct Vector3 { float x, y, z; };
@@ -52,20 +58,37 @@ struct Vector3 { float x, y, z; };
 #define COLOR_GRAY     0xFF888888
 #define COLOR_ORANGE   0xFFFF8800
 #define COLOR_BLUE     0xFF0088FF
+#define COLOR_PINK     0xFFFF69B4
+#define COLOR_LIME     0xFF32CD32
+#define COLOR_PURPLE   0xFF9932CC
+#define COLOR_GOLD     0xFFFFD700
+#define COLOR_CRIMSON  0xFFDC143C
+#define COLOR_TEAL     0xFF008080
 
-// ==================== OFFSETS ====================
-#define OFFSET_NICKNAME       0x90
-#define OFFSET_ISLOCAL        0x98
-#define OFFSET_PLAYERROLE     0xA0
-#define OFFSET_FOGOFWAR       0xF4
-#define OFFSET_ISGHOST        0x178
-#define OFFSET_TRANSFORMVIEW  0x2C0
+// ====================================================================================
+// OFFSETS - dump.cs'den alındı
+// ====================================================================================
 
-#define OFFSET_TV_LATESTPOS        0x30
-#define OFFSET_TV_LASTTRANSFORMPOS 0x38
+// --- PlayableEntity (TypeDefIndex: 6285) ---
+#define OFFSET_PE_NICKNAME           0x90
+#define OFFSET_PE_ISLOCAL            0x98
+#define OFFSET_PE_PLAYERROLE         0xA0   // GGDRole* (pointer)
+#define OFFSET_PE_TEAMID             0xDC
+#define OFFSET_PE_FOGOFWAR           0xF4
+#define OFFSET_PE_ISGHOST            0x178
+#define OFFSET_PE_ENTITYNUMBER       0x88
+#define OFFSET_PE_TRANSFORMVIEW      0x2C0
 
-#define OFFSET_LP_MAINCAMERA       0x78
-#define OFFSET_LP_DISABLEMOVEMENT  0x98
+// --- GGDRole (TypeDefIndex: 5656) ---
+#define OFFSET_ROLE_TYPE             0x12   // RoleType (short)
+
+// --- BetterPhotonTransformView (TypeDefIndex: 1961) ---
+#define OFFSET_TV_LATESTPOS          0x30
+#define OFFSET_TV_LASTTRANSFORMPOS   0x38
+
+// --- LocalPlayer (TypeDefIndex: 6261) ---
+#define OFFSET_LP_MAINCAMERA         0x78
+#define OFFSET_LP_INVOTINGSCREEN     0xC3
 
 // ==================== ESP DATA ====================
 struct PlayerData {
@@ -73,24 +96,30 @@ struct PlayerData {
     bool isGhost;
     bool isLocal;
     int role;
+    int teamId;
+    int entityNumber;
     char name[64];
     bool isValid;
+    float distanceToLocal;
 };
 
 #define MAX_PLAYERS 20
 PlayerData g_Players[MAX_PLAYERS];
 int g_PlayerCount = 0;
 Vector2 g_LocalPlayerPos;
-pthread_mutex_t g_PlayerMutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Hızlı erişim için mutex yerine atomic-like yaklaşım
+volatile bool g_DataReady = false;
+PlayerData g_RenderPlayers[MAX_PLAYERS];  // Render için kopyalanan data
+int g_RenderPlayerCount = 0;
 
 float g_ScreenWidth = 1080.0f;
 float g_ScreenHeight = 2400.0f;
 float g_DefaultOrthoSize = 5.0f;
 
-// ESP başlangıç stabilizasyonu
 int g_FrameCount = 0;
 bool g_ESPStabilized = false;
-#define STABILIZE_FRAMES 10
+#define STABILIZE_FRAMES 3  // Azaltıldı
 
 // ==================== ESP JNI ====================
 JavaVM* g_JavaVM = NULL;
@@ -117,11 +146,11 @@ JNIEnv* GetJNIEnv() {
     return env;
 }
 
-// ==================== UTF-16 TO ASCII ====================
+// ==================== HELPER FUNCTIONS ====================
 void WideCharToAscii(void* instance, char* outName, int maxLen) {
     memset(outName, 0, maxLen);
     
-    uintptr_t strPtr = *(uintptr_t*)((uintptr_t)instance + OFFSET_NICKNAME);
+    uintptr_t strPtr = *(uintptr_t*)((uintptr_t)instance + OFFSET_PE_NICKNAME);
     if (!strPtr) { strcpy(outName, "Unknown"); return; }
     
     int length = *(int*)(strPtr + 0x10);
@@ -145,18 +174,23 @@ void WideCharToAscii(void* instance, char* outName, int maxLen) {
     else outName[outIdx] = '\0';
 }
 
-// ==================== GET ORTHO SIZE ====================
+int GetRoleType(void* instance) {
+    if (!instance) return 0;
+    void* rolePtr = *(void**)((uintptr_t)instance + OFFSET_PE_PLAYERROLE);
+    if (!rolePtr) return 0;
+    return (int)*(short*)((uintptr_t)rolePtr + OFFSET_ROLE_TYPE);
+}
+
 float GetCurrentOrthoSize() {
     if (DroneView) return DroneZoom;
     return g_DefaultOrthoSize;
 }
 
-// ==================== GET POSITION ====================
 Vector2 GetPlayerPosition(void* instance, bool forLocal) {
     Vector2 pos = {0, 0};
     if (!instance) return pos;
     
-    void* tv = *(void**)((uintptr_t)instance + OFFSET_TRANSFORMVIEW);
+    void* tv = *(void**)((uintptr_t)instance + OFFSET_PE_TRANSFORMVIEW);
     if (tv) {
         if (forLocal) {
             pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LASTTRANSFORMPOS);
@@ -170,11 +204,32 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
     return pos;
 }
 
-// ==================== CALCULATE SCALE ====================
 float GetESPScale() {
     float orthoSize = GetCurrentOrthoSize();
-    float pixelsPerUnit = g_ScreenHeight / (orthoSize * 2.0f);
-    return pixelsPerUnit;
+    if (orthoSize <= 0) orthoSize = 5.0f;
+    return g_ScreenHeight / (orthoSize * 2.0f);
+}
+
+struct RoleInfo { const char* name; int color; };
+RoleInfo GetRoleInfo(int roleId) {
+    RoleInfo info;
+    switch(roleId) {
+        case 0: info.name = "In Lobby"; info.color = COLOR_GRAY; break;
+        case 1: info.name = "Goose"; info.color = COLOR_GREEN; break;
+        case 2: info.name = "Duck"; info.color = COLOR_RED; break;
+        case 3: info.name = "Dodo"; info.color = COLOR_YELLOW; break;
+        case 4: info.name = "Falcon"; info.color = COLOR_ORANGE; break;
+        case 5: info.name = "Vulture"; info.color = COLOR_PURPLE; break;
+        case 6: info.name = "Pelican"; info.color = COLOR_CYAN; break;
+        case 7: info.name = "Morphling"; info.color = COLOR_PINK; break;
+        case 8: info.name = "Silencer"; info.color = COLOR_CRIMSON; break;
+        case 9: info.name = "Sheriff"; info.color = COLOR_GOLD; break;
+        case 10: info.name = "Engineer"; info.color = COLOR_TEAL; break;
+        case 11: info.name = "Detective"; info.color = COLOR_BLUE; break;
+        case 12: info.name = "Medium"; info.color = COLOR_MAGENTA; break;
+        default: info.name = "Role"; info.color = COLOR_WHITE; break;
+    }
+    return info;
 }
 
 // ==================== ESP INIT ====================
@@ -202,72 +257,59 @@ void InitESP(JNIEnv *env) {
 
 void UpdateScreenSize() {
     JNIEnv* env = GetJNIEnv();
-    if (!env || !g_MenuClass) return;
+    if (!env || !g_MenuClass || !g_GetScreenWidthMethod) return;
     
-    if (g_GetScreenWidthMethod && g_GetScreenHeightMethod) {
-        int w = env->CallStaticIntMethod(g_MenuClass, g_GetScreenWidthMethod);
-        int h = env->CallStaticIntMethod(g_MenuClass, g_GetScreenHeightMethod);
-        if (w > 100 && h > 100) {
-            g_ScreenWidth = (float)w;
-            g_ScreenHeight = (float)h;
-        }
+    int w = env->CallStaticIntMethod(g_MenuClass, g_GetScreenWidthMethod);
+    int h = env->CallStaticIntMethod(g_MenuClass, g_GetScreenHeightMethod);
+    if (w > 100 && h > 100) {
+        g_ScreenWidth = (float)w;
+        g_ScreenHeight = (float)h;
     }
 }
 
-// ==================== ESP DRAW ====================
-void DrawLine(float x1, float y1, float x2, float y2, int color) {
-    if (!g_ESPReady || !g_DrawLineColorMethod) return;
-    JNIEnv* env = GetJNIEnv();
-    if (env) env->CallStaticVoidMethod(g_MenuClass, g_DrawLineColorMethod, x1, y1, x2, y2, color);
+// ==================== ESP DRAW (Inline for speed) ====================
+inline void DrawLine(JNIEnv* env, float x1, float y1, float x2, float y2, int color) {
+    if (env && g_DrawLineColorMethod)
+        env->CallStaticVoidMethod(g_MenuClass, g_DrawLineColorMethod, x1, y1, x2, y2, color);
 }
 
-void DrawBox(float x, float y, float w, float h, int color) {
-    if (!g_ESPReady || !g_DrawBoxColorMethod) return;
-    JNIEnv* env = GetJNIEnv();
-    if (env) env->CallStaticVoidMethod(g_MenuClass, g_DrawBoxColorMethod, x, y, w, h, color);
+inline void DrawBox(JNIEnv* env, float x, float y, float w, float h, int color) {
+    if (env && g_DrawBoxColorMethod)
+        env->CallStaticVoidMethod(g_MenuClass, g_DrawBoxColorMethod, x, y, w, h, color);
 }
 
-void DrawText(float x, float y, const char* text, int color) {
-    if (!g_ESPReady || !g_DrawTextColorMethod || !text) return;
-    JNIEnv* env = GetJNIEnv();
-    if (env) {
-        jstring jstr = env->NewStringUTF(text);
-        if (jstr) {
-            env->CallStaticVoidMethod(g_MenuClass, g_DrawTextColorMethod, x, y, jstr, color);
-            env->DeleteLocalRef(jstr);
-        }
+inline void DrawText(JNIEnv* env, float x, float y, const char* text, int color) {
+    if (!env || !g_DrawTextColorMethod || !text) return;
+    jstring jstr = env->NewStringUTF(text);
+    if (jstr) {
+        env->CallStaticVoidMethod(g_MenuClass, g_DrawTextColorMethod, x, y, jstr, color);
+        env->DeleteLocalRef(jstr);
     }
 }
 
-void ClearESP() {
-    if (!g_ESPReady) return;
-    JNIEnv* env = GetJNIEnv();
-    if (env && g_ClearESPMethod) env->CallStaticVoidMethod(g_MenuClass, g_ClearESPMethod);
+inline void ClearESP(JNIEnv* env) {
+    if (env && g_ClearESPMethod) 
+        env->CallStaticVoidMethod(g_MenuClass, g_ClearESPMethod);
 }
 
-void UpdateESPView() {
-    if (!g_ESPReady) return;
-    JNIEnv* env = GetJNIEnv();
-    if (env && g_UpdateESPMethod) env->CallStaticVoidMethod(g_MenuClass, g_UpdateESPMethod);
+inline void UpdateESPView(JNIEnv* env) {
+    if (env && g_UpdateESPMethod) 
+        env->CallStaticVoidMethod(g_MenuClass, g_UpdateESPMethod);
 }
 
 void SetESPEnabled(bool e) {
-    if (!g_ESPReady) return;
     JNIEnv* env = GetJNIEnv();
-    if (env && g_SetESPEnabledMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetESPEnabledMethod, (jboolean)e);
+    if (env && g_SetESPEnabledMethod) 
+        env->CallStaticVoidMethod(g_MenuClass, g_SetESPEnabledMethod, (jboolean)e);
 }
 
 // ==================== WORLD TO SCREEN ====================
-bool WorldToScreen(Vector2 world, float* sx, float* sy) {
-    if (g_ScreenWidth <= 0 || g_ScreenHeight <= 0) return false;
+inline bool WorldToScreen(Vector2 world, Vector2 localPos, float scale, float* sx, float* sy) {
+    float dx = world.x - localPos.x;
+    float dy = world.y - localPos.y;
     
-    float dx = world.x - g_LocalPlayerPos.x;
-    float dy = world.y - g_LocalPlayerPos.y;
-    
-    float scale = GetESPScale();
-    
-    float cx = g_ScreenWidth / 2.0f;
-    float cy = g_ScreenHeight / 2.0f;
+    float cx = g_ScreenWidth * 0.5f;
+    float cy = g_ScreenHeight * 0.5f;
     
     *sx = cx + (dx * scale);
     *sy = cy - (dy * scale);
@@ -276,319 +318,309 @@ bool WorldToScreen(Vector2 world, float* sx, float* sy) {
 }
 
 // ==================== LINE CLIPPING ====================
-#define INSIDE 0
-#define LEFT   1
-#define RIGHT  2
-#define BOTTOM 4
-#define TOP    8
-
-int ComputeOutCode(float x, float y, float xmin, float ymin, float xmax, float ymax) {
-    int code = INSIDE;
-    if (x < xmin) code |= LEFT;
-    else if (x > xmax) code |= RIGHT;
-    if (y < ymin) code |= TOP;
-    else if (y > ymax) code |= BOTTOM;
-    return code;
-}
-
 bool ClipLine(float* x1, float* y1, float* x2, float* y2) {
-    float xmin = 0, ymin = 0;
-    float xmax = g_ScreenWidth, ymax = g_ScreenHeight;
+    const float xmin = 0, ymin = 0;
+    const float xmax = g_ScreenWidth, ymax = g_ScreenHeight;
     
-    int outcode1 = ComputeOutCode(*x1, *y1, xmin, ymin, xmax, ymax);
-    int outcode2 = ComputeOutCode(*x2, *y2, xmin, ymin, xmax, ymax);
+    int outcode1 = 0, outcode2 = 0;
+    
+    if (*x1 < xmin) outcode1 |= 1;
+    else if (*x1 > xmax) outcode1 |= 2;
+    if (*y1 < ymin) outcode1 |= 8;
+    else if (*y1 > ymax) outcode1 |= 4;
+    
+    if (*x2 < xmin) outcode2 |= 1;
+    else if (*x2 > xmax) outcode2 |= 2;
+    if (*y2 < ymin) outcode2 |= 8;
+    else if (*y2 > ymax) outcode2 |= 4;
     
     while (true) {
         if (!(outcode1 | outcode2)) return true;
-        else if (outcode1 & outcode2) return false;
-        else {
-            float x, y;
-            int outcodeOut = outcode1 ? outcode1 : outcode2;
-            
-            if (outcodeOut & BOTTOM) {
-                x = *x1 + (*x2 - *x1) * (ymax - *y1) / (*y2 - *y1);
-                y = ymax;
-            } else if (outcodeOut & TOP) {
-                x = *x1 + (*x2 - *x1) * (ymin - *y1) / (*y2 - *y1);
-                y = ymin;
-            } else if (outcodeOut & RIGHT) {
-                y = *y1 + (*y2 - *y1) * (xmax - *x1) / (*x2 - *x1);
-                x = xmax;
-            } else {
-                y = *y1 + (*y2 - *y1) * (xmin - *x1) / (*x2 - *x1);
-                x = xmin;
-            }
-            
-            if (outcodeOut == outcode1) {
-                *x1 = x; *y1 = y;
-                outcode1 = ComputeOutCode(*x1, *y1, xmin, ymin, xmax, ymax);
-            } else {
-                *x2 = x; *y2 = y;
-                outcode2 = ComputeOutCode(*x2, *y2, xmin, ymin, xmax, ymax);
-            }
+        if (outcode1 & outcode2) return false;
+        
+        float x, y;
+        int outcodeOut = outcode1 ? outcode1 : outcode2;
+        
+        if (outcodeOut & 4) { x = *x1 + (*x2 - *x1) * (ymax - *y1) / (*y2 - *y1); y = ymax; }
+        else if (outcodeOut & 8) { x = *x1 + (*x2 - *x1) * (ymin - *y1) / (*y2 - *y1); y = ymin; }
+        else if (outcodeOut & 2) { y = *y1 + (*y2 - *y1) * (xmax - *x1) / (*x2 - *x1); x = xmax; }
+        else { y = *y1 + (*y2 - *y1) * (xmin - *x1) / (*x2 - *x1); x = xmin; }
+        
+        if (outcodeOut == outcode1) {
+            *x1 = x; *y1 = y;
+            outcode1 = 0;
+            if (*x1 < xmin) outcode1 |= 1;
+            else if (*x1 > xmax) outcode1 |= 2;
+            if (*y1 < ymin) outcode1 |= 8;
+            else if (*y1 > ymax) outcode1 |= 4;
+        } else {
+            *x2 = x; *y2 = y;
+            outcode2 = 0;
+            if (*x2 < xmin) outcode2 |= 1;
+            else if (*x2 > xmax) outcode2 |= 2;
+            if (*y2 < ymin) outcode2 |= 8;
+            else if (*y2 > ymax) outcode2 |= 4;
         }
     }
 }
 
-// ==================== EDGE INDICATOR ====================
-void GetEdgePosition(float sx, float sy, float* edgeX, float* edgeY) {
-    float cx = g_ScreenWidth / 2.0f;
-    float cy = g_ScreenHeight / 2.0f;
-    
+// ==================== EDGE POSITION ====================
+inline void GetEdgePosition(float sx, float sy, float* edgeX, float* edgeY) {
+    float cx = g_ScreenWidth * 0.5f;
+    float cy = g_ScreenHeight * 0.5f;
     float dx = sx - cx;
     float dy = sy - cy;
     
-    float padding = 80.0f;  // Kenardan uzaklık
+    if (dx == 0 && dy == 0) { *edgeX = cx; *edgeY = cy; return; }
     
-    float maxX = g_ScreenWidth - padding;
-    float maxY = g_ScreenHeight - padding;
-    float minX = padding;
-    float minY = padding;
+    float padding = 100.0f;
+    float maxX = g_ScreenWidth - padding, minX = padding;
+    float maxY = g_ScreenHeight - padding, minY = padding;
     
-    // Açıyı hesapla
-    float angle = atan2f(dy, dx);
-    
-    // Ekran kenarına olan mesafeyi hesapla
-    float tX = (dx > 0) ? (maxX - cx) / dx : (minX - cx) / dx;
-    float tY = (dy > 0) ? (maxY - cy) / dy : (minY - cy) / dy;
-    
+    float tX = (dx > 0) ? ((maxX - cx) / dx) : ((minX - cx) / dx);
+    float tY = (dy > 0) ? ((maxY - cy) / dy) : ((minY - cy) / dy);
     float t = fminf(fabsf(tX), fabsf(tY));
+    if (t > 1) t = 1;
     
     *edgeX = cx + dx * t;
     *edgeY = cy + dy * t;
     
-    // Sınırları kontrol et
-    if (*edgeX < minX) *edgeX = minX;
-    if (*edgeX > maxX) *edgeX = maxX;
-    if (*edgeY < minY) *edgeY = minY;
-    if (*edgeY > maxY) *edgeY = maxY;
+    if (*edgeX < minX) *edgeX = minX; else if (*edgeX > maxX) *edgeX = maxX;
+    if (*edgeY < minY) *edgeY = minY; else if (*edgeY > maxY) *edgeY = maxY;
+}
+
+// ==================== RENDER DEBUG PANEL ====================
+void RenderDebugPanel(JNIEnv* env) {
+    if (!DebugMode || !env) return;
+    
+    float startX = 30, startY = 120, lineHeight = 28;
+    float maxY = g_ScreenHeight - 100;
+    
+    DrawText(env, startX + 100, startY, "=== DEBUG INFO ===", COLOR_MAGENTA);
+    startY += lineHeight + 5;
+    
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Screen: %.0fx%.0f | Ortho: %.2f | Scale: %.1f", 
+             g_ScreenWidth, g_ScreenHeight, GetCurrentOrthoSize(), GetESPScale());
+    DrawText(env, startX + 150, startY, buf, COLOR_CYAN);
+    startY += lineHeight;
+    
+    snprintf(buf, sizeof(buf), "InGame: %s | Lobby: %s | Vote: %s | Players: %d", 
+             isInGame ? "Y" : "N", isInLobby ? "Y" : "N", isInVotingScreen ? "Y" : "N", g_RenderPlayerCount);
+    DrawText(env, startX + 160, startY, buf, COLOR_CYAN);
+    startY += lineHeight;
+    
+    snprintf(buf, sizeof(buf), "LocalPos: %.2f, %.2f | MyRole: %d", 
+             g_LocalPlayerPos.x, g_LocalPlayerPos.y, localPlayerRole);
+    DrawText(env, startX + 100, startY, buf, COLOR_GREEN);
+    startY += lineHeight + 10;
+    
+    DrawText(env, startX + 100, startY, "=== PLAYERS ===", COLOR_YELLOW);
+    startY += lineHeight;
+    
+    for (int i = 0; i < g_RenderPlayerCount && startY < maxY; i++) {
+        PlayerData* p = &g_RenderPlayers[i];
+        if (!p->isValid) continue;
+        
+        RoleInfo ri = GetRoleInfo(p->role);
+        snprintf(buf, sizeof(buf), "#%d %s%s | %s(%d) T:%d | %.1f,%.1f | %.1fm",
+                 p->entityNumber, p->name,
+                 p->isLocal ? "[YOU]" : (p->isGhost ? "[G]" : ""),
+                 ri.name, p->role, p->teamId,
+                 p->position.x, p->position.y, p->distanceToLocal);
+        
+        DrawText(env, startX + 200, startY, buf, 
+                p->isLocal ? COLOR_CYAN : (p->isGhost ? COLOR_GRAY : ri.color));
+        startY += lineHeight;
+    }
 }
 
 // ==================== RENDER ESP ====================
-void RenderESP() {
-    if (!ESPEnabled || !g_ESPReady) return;
+void RenderESP(JNIEnv* env) {
+    if (!ESPEnabled || !env) return;
+    if (ESPHideInVote && isInVotingScreen) return;
+    if (ESPHideInLobby && isInLobby) return;
+    if (!isInGame) return;
     
-    UpdateScreenSize();
-    
-    if (g_ScreenWidth <= 0) g_ScreenWidth = 1080;
-    if (g_ScreenHeight <= 0) g_ScreenHeight = 2400;
-    
-    // Stabilizasyon kontrolü
     if (!g_ESPStabilized) {
         g_FrameCount++;
-        if (g_FrameCount < STABILIZE_FRAMES) {
-            return;  // İlk birkaç frame atla
-        }
+        if (g_FrameCount < STABILIZE_FRAMES) return;
         g_ESPStabilized = true;
     }
     
-    float cx = g_ScreenWidth / 2.0f;
-    float cy = g_ScreenHeight / 2.0f;
+    float cx = g_ScreenWidth * 0.5f;
+    float cy = g_ScreenHeight * 0.5f;
     float scale = GetESPScale();
-    float orthoSize = GetCurrentOrthoSize();
+    Vector2 localPos = g_LocalPlayerPos;
     
-    pthread_mutex_lock(&g_PlayerMutex);
-    
-    // ===== DEBUG PANEL =====
-    if (DebugMode) {
-        float dy = 80;
-        
-        char info1[64];
-        snprintf(info1, sizeof(info1), "Screen: %.0fx%.0f", g_ScreenWidth, g_ScreenHeight);
-        DrawText(180, dy, info1, COLOR_MAGENTA); dy += 28;
-        
-        char info2[64];
-        snprintf(info2, sizeof(info2), "OrthoSize: %.2f Scale: %.1f", orthoSize, scale);
-        DrawText(180, dy, info2, COLOR_MAGENTA); dy += 28;
-        
-        char info3[64];
-        snprintf(info3, sizeof(info3), "DroneView: %s Zoom: %.1f", DroneView ? "ON" : "OFF", DroneZoom);
-        DrawText(180, dy, info3, DroneView ? COLOR_GREEN : COLOR_GRAY); dy += 28;
-        
-        char info4[64];
-        snprintf(info4, sizeof(info4), "Players: %d Stabilized: %s", g_PlayerCount, g_ESPStabilized ? "YES" : "NO");
-        DrawText(180, dy, info4, COLOR_MAGENTA); dy += 28;
-        
-        if (localPlayerInstance) {
-            char info5[64];
-            snprintf(info5, sizeof(info5), "MyPos: %.2f, %.2f", g_LocalPlayerPos.x, g_LocalPlayerPos.y);
-            DrawText(180, dy, info5, COLOR_CYAN); dy += 28;
-        }
-    }
-    
-    // ===== ESP DRAWING =====
-    if (!localPlayerInstance) {
-        pthread_mutex_unlock(&g_PlayerMutex);
-        return;
-    }
-    
-    for (int i = 0; i < g_PlayerCount; i++) {
-        PlayerData* p = &g_Players[i];
+    for (int i = 0; i < g_RenderPlayerCount; i++) {
+        PlayerData* p = &g_RenderPlayers[i];
         if (!p->isValid || p->isLocal || p->isGhost) continue;
         if (p->position.x == 0 && p->position.y == 0) continue;
         
         float sx, sy;
-        WorldToScreen(p->position, &sx, &sy);
+        WorldToScreen(p->position, localPos, scale, &sx, &sy);
         
         int color = COLOR_WHITE;
+        float dist = p->distanceToLocal;
         
-        float dist = sqrtf(powf(p->position.x - g_LocalPlayerPos.x, 2) + 
-                          powf(p->position.y - g_LocalPlayerPos.y, 2));
-        
-        // Ekran içinde mi?
         bool onScreen = (sx >= 0 && sx <= g_ScreenWidth && sy >= 0 && sy <= g_ScreenHeight);
         
-        // ===== LINES (her zaman çiz) =====
+        // Lines
         if (ESPLines) {
-            float lx1 = cx, ly1 = cy;
-            float lx2 = sx, ly2 = sy;
-            
+            float lx1 = cx, ly1 = cy, lx2 = sx, ly2 = sy;
             if (ClipLine(&lx1, &ly1, &lx2, &ly2)) {
-                DrawLine(lx1, ly1, lx2, ly2, color);
+                DrawLine(env, lx1, ly1, lx2, ly2, color);
             }
         }
         
         if (onScreen) {
-            // ===== BOX (daha aşağı) =====
-            if (ESPBox) {
-                float playerWidthUnits = 0.9f;
-                float playerHeightUnits = 1.6f;
-                
-                float boxW = playerWidthUnits * scale;
-                float boxH = playerHeightUnits * scale;
-                
-                if (boxW < 45) boxW = 45;
-                if (boxH < 70) boxH = 70;
-                if (boxW > 200) boxW = 200;
-                if (boxH > 320) boxH = 320;
-                
-                // Box pozisyonu - daha aşağı kaydırıldı (0.50f)
-                float boxX = sx - boxW / 2.0f;
-                float boxY = sy - boxH * 0.50f;
-                
-                DrawBox(boxX, boxY, boxW, boxH, color);
-            }
+            float boxW = 0.9f * scale, boxH = 1.6f * scale;
+            if (boxW < 45) boxW = 45; if (boxH < 70) boxH = 70;
+            if (boxW > 200) boxW = 200; if (boxH > 320) boxH = 320;
             
-            // ===== DISTANCE (daha büyük) =====
+            float boxX = sx - boxW * 0.5f;
+            float boxY = sy - boxH * 0.40f;
+            
+            if (ESPBox) DrawBox(env, boxX, boxY, boxW, boxH, color);
+            
             if (ESPDistance) {
-                char dt[24];
-                snprintf(dt, sizeof(dt), "%.1f m", dist);
-                
-                float boxH = 1.6f * scale;
-                if (boxH < 70) boxH = 70;
-                if (boxH > 320) boxH = 320;
-                
-                DrawText(sx, sy - boxH * 0.50f - 25, dt, COLOR_YELLOW);
+                char dt[16];
+                snprintf(dt, sizeof(dt), "%.1fm", dist);
+                DrawText(env, sx, boxY - 25, dt, COLOR_YELLOW);
             }
             
-            // ===== NAME (daha büyük) =====
             if (ESPName) {
-                float boxH = 1.6f * scale;
-                if (boxH < 70) boxH = 70;
-                if (boxH > 320) boxH = 320;
-                
-                DrawText(sx, sy - boxH * 0.50f - 55, p->name, COLOR_WHITE);
+                DrawText(env, sx, boxY - 55, p->name, COLOR_WHITE);
             }
         } 
         else if (ESPEdgeIndicator) {
-            // ===== EDGE INDICATOR (ekran dışı) =====
             float edgeX, edgeY;
             GetEdgePosition(sx, sy, &edgeX, &edgeY);
             
-            // Yön oku çiz (küçük üçgen)
-            float arrowSize = 15.0f;
-            float angle = atan2f(sy - cy, sx - cx);
+            DrawBox(env, edgeX - 8, edgeY - 8, 16, 16, COLOR_ORANGE);
             
-            // Ok başı
-            float tipX = edgeX;
-            float tipY = edgeY;
+            char et[48];
+            snprintf(et, sizeof(et), "%s %.0fm", p->name, dist);
             
-            // Ok gövdesi (çizgi yerine nokta)
-            DrawBox(tipX - 6, tipY - 6, 12, 12, COLOR_ORANGE);
+            float tx = edgeX, ty = edgeY - 25;
+            if (edgeX < 150) tx = 150;
+            else if (edgeX > g_ScreenWidth - 150) tx = g_ScreenWidth - 150;
+            if (edgeY < 80) ty = edgeY + 35;
             
-            // İsim ve mesafe
-            char edgeText[48];
-            snprintf(edgeText, sizeof(edgeText), "%s %.0fm", p->name, dist);
-            
-            // Kenara göre text pozisyonu ayarla
-            float textX = edgeX;
-            float textY = edgeY;
-            
-            // Sol kenardaysa sağa kaydır
-            if (edgeX < 100) textX = edgeX + 50;
-            // Sağ kenardaysa sola kaydır
-            else if (edgeX > g_ScreenWidth - 100) textX = edgeX - 50;
-            
-            // Üst kenardaysa aşağı kaydır
-            if (edgeY < 100) textY = edgeY + 30;
-            // Alt kenardaysa yukarı kaydır
-            else if (edgeY > g_ScreenHeight - 100) textY = edgeY - 30;
-            
-            DrawText(textX, textY, edgeText, COLOR_ORANGE);
+            DrawText(env, tx, ty, et, COLOR_ORANGE);
         }
     }
+}
+
+// ==================== CLEAR ALL ====================
+void ClearAllESP() {
+    JNIEnv* env = GetJNIEnv();
+    if (env) {
+        ClearESP(env);
+        UpdateESPView(env);
+    }
     
-    pthread_mutex_unlock(&g_PlayerMutex);
+    g_PlayerCount = 0;
+    g_RenderPlayerCount = 0;
+    g_ESPStabilized = false;
+    g_FrameCount = 0;
+    isInGame = false;
+    isInLobby = true;
+    localPlayerInstance = NULL;
+    localPlayerObject = NULL;
 }
 
 // ==================== HOOKS ====================
 
+// PlayableEntity.Update - RVA: 0x3DC28D8
 void (*old_Update)(void *instance);
 void Update(void *instance) {
     if (instance) {
-        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_ISLOCAL);
+        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
         
         if (isLocal) {
-            pthread_mutex_lock(&g_PlayerMutex);
-            g_PlayerCount = 0;
-            memset(g_Players, 0, sizeof(g_Players));
-            pthread_mutex_unlock(&g_PlayerMutex);
-            
             localPlayerInstance = instance;
+            isInGame = true;
+            localPlayerRole = GetRoleType(instance);
+            isInLobby = (localPlayerRole == 0);
+            
+            // Player listesini temizle
+            g_PlayerCount = 0;
             g_LocalPlayerPos = GetPlayerPosition(instance, true);
             
             if (UnlimitedVision) {
-                *(bool*)((uintptr_t)instance + OFFSET_FOGOFWAR) = false;
+                *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
             }
         }
         
-        if (ESPEnabled) {
-            pthread_mutex_lock(&g_PlayerMutex);
-            if (g_PlayerCount < MAX_PLAYERS) {
-                PlayerData* p = &g_Players[g_PlayerCount];
-                p->position = GetPlayerPosition(instance, isLocal);
-                p->isGhost = *(bool*)((uintptr_t)instance + OFFSET_ISGHOST);
-                p->isLocal = isLocal;
-                p->role = *(int*)((uintptr_t)instance + OFFSET_PLAYERROLE);
-                WideCharToAscii(instance, p->name, sizeof(p->name));
-                p->isValid = true;
-                g_PlayerCount++;
+        // Veri topla (mutex yok - daha hızlı)
+        if ((ESPEnabled || DebugMode) && g_PlayerCount < MAX_PLAYERS) {
+            PlayerData* p = &g_Players[g_PlayerCount];
+            p->position = GetPlayerPosition(instance, isLocal);
+            p->isGhost = *(bool*)((uintptr_t)instance + OFFSET_PE_ISGHOST);
+            p->isLocal = isLocal;
+            p->role = GetRoleType(instance);
+            p->teamId = *(int*)((uintptr_t)instance + OFFSET_PE_TEAMID);
+            p->entityNumber = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
+            WideCharToAscii(instance, p->name, sizeof(p->name));
+            
+            if (!isLocal) {
+                float dx = p->position.x - g_LocalPlayerPos.x;
+                float dy = p->position.y - g_LocalPlayerPos.y;
+                p->distanceToLocal = sqrtf(dx*dx + dy*dy);
+            } else {
+                p->distanceToLocal = 0;
             }
-            pthread_mutex_unlock(&g_PlayerMutex);
+            
+            p->isValid = true;
+            g_PlayerCount++;
         }
     }
     old_Update(instance);
 }
 
+// PlayableEntity.LateUpdate - RVA: 0x3DC368C (FixedUpdate yerine - daha hızlı!)
 void (*old_LateUpdate)(void *instance);
 void LateUpdate(void *instance) {
     old_LateUpdate(instance);
-    if (instance) {
-        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_ISLOCAL);
-        if (isLocal && ESPEnabled && g_ESPReady) {
-            ClearESP();
-            RenderESP();
-            UpdateESPView();
+    
+    if (instance && g_ESPReady) {
+        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
+        
+        if (isLocal) {
+            // Render için veriyi kopyala (hızlı copy)
+            g_RenderPlayerCount = g_PlayerCount;
+            memcpy(g_RenderPlayers, g_Players, sizeof(PlayerData) * g_PlayerCount);
+            
+            // Ekran boyutunu güncelle (her 30 frame'de bir)
+            static int screenUpdateCounter = 0;
+            if (++screenUpdateCounter >= 30) {
+                UpdateScreenSize();
+                screenUpdateCounter = 0;
+            }
+            
+            JNIEnv* env = GetJNIEnv();
+            if (env) {
+                ClearESP(env);
+                
+                if (DebugMode) RenderDebugPanel(env);
+                if (ESPEnabled) RenderESP(env);
+                
+                UpdateESPView(env);
+            }
         }
     }
 }
 
+// PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
 void TurnIntoGhost(void *instance, int deathReason) {
     if (GodMode && instance == localPlayerInstance) return;
     old_TurnIntoGhost(instance, deathReason);
 }
 
+// LocalPlayer.Update - RVA: 0x3D986B8
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
     if (instance) {
@@ -597,6 +629,8 @@ void LocalPlayer_Update(void *instance) {
         void* cam = *(void**)((uintptr_t)instance + OFFSET_LP_MAINCAMERA);
         if (cam) mainCameraObject = cam;
         
+        isInVotingScreen = *(bool*)((uintptr_t)instance + OFFSET_LP_INVOTINGSCREEN);
+        
         if (DroneView && OverrideOrthographicSize) {
             OverrideOrthographicSize(instance, DroneZoom);
         }
@@ -604,26 +638,39 @@ void LocalPlayer_Update(void *instance) {
     old_LocalPlayer_Update(instance);
 }
 
+// LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768
 float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
-    float originalSpeed = old_GetPlayerSpeed(instance);
-    if (SpeedHack) return originalSpeed * SpeedMultiplier;
-    return originalSpeed;
+    float speed = old_GetPlayerSpeed(instance);
+    return SpeedHack ? speed * SpeedMultiplier : speed;
 }
 
+// GGDRole.OnEnterVent - RVA: 0x3C55C94
 void (*old_OnEnterVent)(void *instance, void* vent, bool setCooldown);
 void OnEnterVent(void *instance, void* vent, bool setCooldown) {
     old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown);
 }
 
+// GGDRole.OnExitVent - RVA: 0x3C55D88
 void (*old_OnExitVent)(void *instance, void* vent, bool setCooldown);
 void OnExitVent(void *instance, void* vent, bool setCooldown) {
     old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown);
 }
 
+// GGDRole.SetVentCooldown - RVA: 0x3C548AC
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) {
     old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown);
+}
+
+// PlayableEntity.Despawn - RVA: 0x3DC5328
+void (*old_Despawn)(void *instance);
+void Despawn(void *instance) {
+    if (instance) {
+        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
+        if (isLocal) ClearAllESP();
+    }
+    old_Despawn(instance);
 }
 
 // ==================== FEATURES ====================
@@ -632,28 +679,30 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     
     const char *features[] = {
         OBFUSCATE("Category_Vision & Cooldown"),
-        OBFUSCATE("Toggle_Unlimited Vision"),            // 0
-        OBFUSCATE("Toggle_No Vent Cooldown"),            // 1
+        OBFUSCATE("Toggle_Unlimited Vision"),
+        OBFUSCATE("Toggle_No Vent Cooldown"),
         
         OBFUSCATE("Category_Camera"),
-        OBFUSCATE("Toggle_Drone View"),                  // 2
-        OBFUSCATE("SeekBar_Zoom Level_5_25"),            // 3
+        OBFUSCATE("Toggle_Drone View"),
+        OBFUSCATE("SeekBar_Zoom Level_5_25"),
         
         OBFUSCATE("Category_ESP Settings"),
-        OBFUSCATE("Toggle_ESP Enabled"),                 // 4
-        OBFUSCATE("Toggle_True_ESP Lines"),              // 5
-        OBFUSCATE("Toggle_True_ESP Box"),                // 6
-        OBFUSCATE("Toggle_True_ESP Distance"),           // 7
-        OBFUSCATE("Toggle_True_ESP Names"),              // 8
-        OBFUSCATE("Toggle_True_Edge Indicator"),         // 9 - Yeni
+        OBFUSCATE("Toggle_ESP Enabled"),
+        OBFUSCATE("Toggle_True_ESP Lines"),
+        OBFUSCATE("Toggle_True_ESP Box"),
+        OBFUSCATE("Toggle_True_ESP Distance"),
+        OBFUSCATE("Toggle_True_ESP Names"),
+        OBFUSCATE("Toggle_True_Edge Indicator"),
+        OBFUSCATE("Toggle_True_Hide in Vote Screen"),
+        OBFUSCATE("Toggle_Hide in Lobby"),
+        
+        OBFUSCATE("Category_Debug Panel"),
+        OBFUSCATE("Toggle_Show Debug Info"),
         
         OBFUSCATE("Category_Local Only (May Not Work)"),
-        OBFUSCATE("Toggle_God Mode [LOCAL]"),            // 10
-        OBFUSCATE("Toggle_Speed Hack [LOCAL]"),          // 11
-        OBFUSCATE("SeekBar_Speed Multiplier_10_40"),     // 12
-        
-        OBFUSCATE("Category_Debug"),
-        OBFUSCATE("Toggle_Show Debug Info"),             // 13
+        OBFUSCATE("Toggle_God Mode [LOCAL]"),
+        OBFUSCATE("Toggle_Speed Hack [LOCAL]"),
+        OBFUSCATE("SeekBar_Speed Multiplier_10_40"),
     };
 
     int count = sizeof(features) / sizeof(features[0]);
@@ -669,47 +718,32 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
     if (!g_JavaVM) env->GetJavaVM(&g_JavaVM);
     
     switch (featNum) {
-        case 0:
-            UnlimitedVision = boolean;
+        case 0: UnlimitedVision = boolean;
             if (!boolean && localPlayerInstance) 
-                *(bool*)((uintptr_t)localPlayerInstance + OFFSET_FOGOFWAR) = true;
+                *(bool*)((uintptr_t)localPlayerInstance + OFFSET_PE_FOGOFWAR) = true;
             break;
-        case 1: 
-            NoCooldown = boolean;
+        case 1: NoCooldown = boolean; break;
+        case 2: DroneView = boolean;
+            if (!boolean && localPlayerObject && OverrideOrthographicSize)
+                OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
+            g_ESPStabilized = false; g_FrameCount = 0;
             break;
-        case 2: 
-            DroneView = boolean;
-            // DroneView kapatıldığında ESP'yi resetle
-            if (!boolean) {
-                g_ESPStabilized = false;
-                g_FrameCount = 0;
-                if (localPlayerObject && OverrideOrthographicSize) {
-                    OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
-                }
-            }
-            break;
-        case 3:
-            DroneZoom = (float)value;
-            break;
-        case 4:
-            ESPEnabled = boolean;
-            // ESP açıldığında stabilizasyonu resetle
-            if (boolean) {
-                g_ESPStabilized = false;
-                g_FrameCount = 0;
-            }
-            SetESPEnabled(boolean);
-            if (!boolean) { ClearESP(); UpdateESPView(); }
+        case 3: DroneZoom = (float)value; break;
+        case 4: ESPEnabled = boolean;
+            if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; }
+            SetESPEnabled(boolean || DebugMode);
             break;
         case 5: ESPLines = boolean; break;
         case 6: ESPBox = boolean; break;
         case 7: ESPDistance = boolean; break;
         case 8: ESPName = boolean; break;
         case 9: ESPEdgeIndicator = boolean; break;
-        case 10: GodMode = boolean; break;
-        case 11: SpeedHack = boolean; break;
-        case 12: SpeedMultiplier = (float)value / 10.0f; break;
-        case 13: DebugMode = boolean; break;
+        case 10: ESPHideInVote = boolean; break;
+        case 11: ESPHideInLobby = boolean; break;
+        case 12: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
+        case 13: GodMode = boolean; break;
+        case 14: SpeedHack = boolean; break;
+        case 15: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -721,18 +755,16 @@ void hack_thread() {
 
     while (!isLibraryLoaded(targetLibName)) sleep(1);
 
-    do {
-        sleep(1);
-        g_il2cppELF = ElfScanner::createWithPath(targetLibName);
-    } while (!g_il2cppELF.isValid());
+    do { sleep(1); g_il2cppELF = ElfScanner::createWithPath(targetLibName); } 
+    while (!g_il2cppELF.isValid());
 
     LOGI("%s loaded", (const char*)targetLibName);
 
 #if defined(__aarch64__)
-    
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC28D8")), Update, old_Update);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC368C")), LateUpdate, old_LateUpdate);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC368C")), LateUpdate, old_LateUpdate);  // LateUpdate!
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCE370")), TurnIntoGhost, old_TurnIntoGhost);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC5328")), Despawn, old_Despawn);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D986B8")), LocalPlayer_Update, old_LocalPlayer_Update);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA7768")), GetPlayerSpeed, old_GetPlayerSpeed);
     
@@ -743,13 +775,9 @@ void hack_thread() {
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C548AC")), SetVentCooldown, old_SetVentCooldown);
     
     LOGI("All hooks installed!");
-    
 #endif
-
     LOGI("Done");
 }
 
 __attribute__((constructor))
-void lib_main() {
-    std::thread(hack_thread).detach();
-}
+void lib_main() { std::thread(hack_thread).detach(); }

@@ -181,14 +181,13 @@ public class Menu {
 			espView = new ESPView(getContext);
 			espWindowManager.addView(espView, ESPView.createLayoutParams());
 
+			// Choreographer kullandığımız için handler'a gerek yok
+			// Ama fallback olarak tutalım
 			espHandler = new Handler(Looper.getMainLooper());
 			espRunnable = new Runnable() {
 				@Override
 				public void run() {
-					if (espEnabled && espView != null) {
-						espView.refresh();
-					}
-					// 16ms -> ~60 FPS (daha akıcı)
+					// Choreographer ile senkronize çalışıyor
 					espHandler.postDelayed(this, 16);
 				}
 			};
