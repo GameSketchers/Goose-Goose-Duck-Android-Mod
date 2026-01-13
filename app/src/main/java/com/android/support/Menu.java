@@ -181,79 +181,97 @@ public class Menu {
 			espView = new ESPView(getContext);
 			espWindowManager.addView(espView, ESPView.createLayoutParams());
 
-			// Choreographer kullandığımız için handler'a gerek yok
-			// Ama fallback olarak tutalım
+			// Choreographer ESPView içinde zaten çalışıyor
+			// Handler sadece fallback için tutuluyor
 			espHandler = new Handler(Looper.getMainLooper());
-			espRunnable = new Runnable() {
-				@Override
-				public void run() {
-					// Choreographer ile senkronize çalışıyor
-					espHandler.postDelayed(this, 16);
-				}
-			};
-			espHandler.post(espRunnable);
 
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
 
-	public static void drawESPLine(float x1, float y1, float x2, float y2) {
-		if (espView != null && espEnabled) {
-			espView.addLine(x1, y1, x2, y2);
+// ==================== BATCH ESP DRAWING ==================== //
+
+	public static void batchDrawESP(String data) {
+		if (espView == null) return;
+
+		// Her zaman temizle
+		espView.clearAll();
+
+		// Eğer data boş veya null ise sadece temizle ve refresh et
+		if (!espEnabled || data == null || data.isEmpty()) {
+			espView.refresh();
+			return;
 		}
+
+		// Parse et
+		String[] items = data.split(";");
+
+		for (String item : items) {
+			if (item.isEmpty() || item.length() < 2) continue;
+
+			try {
+				char type = item.charAt(0);
+				String content = item.substring(1);
+				String[] parts = content.split(",");
+
+				switch (type) {
+					case 'L':
+						if (parts.length >= 5) {
+							espView.addLine(
+								Float.parseFloat(parts[0]),
+								Float.parseFloat(parts[1]),
+								Float.parseFloat(parts[2]),
+								Float.parseFloat(parts[3]),
+								parseColor(parts[4])
+							);
+						}
+						break;
+
+					case 'B':
+						if (parts.length >= 5) {
+							espView.addBox(
+								Float.parseFloat(parts[0]),
+								Float.parseFloat(parts[1]),
+								Float.parseFloat(parts[2]),
+								Float.parseFloat(parts[3]),
+								parseColor(parts[4])
+							);
+						}
+						break;
+
+					case 'T':
+						if (parts.length >= 4) {
+							espView.addText(
+								Float.parseFloat(parts[0]),
+								Float.parseFloat(parts[1]),
+								parts[2],
+								parseColor(parts[3])
+							);
+						}
+						break;
+				}
+			} catch (Exception e) {
+				// Parse error, skip
+			}
+		}
+
+		espView.refresh();
 	}
 
-	public static void drawESPBox(float x, float y, float w, float h) {
-		if (espView != null && espEnabled) {
-			espView.addBox(x, y, w, h);
+	private static int parseColor(String colorStr) {
+		try {
+			return (int) Long.parseLong(colorStr.trim());
+		} catch (Exception e) {
+			return 0xFFFFFFFF;
 		}
 	}
-
-	public static void drawESPText(float x, float y, String text) {
-		if (espView != null && espEnabled) {
-			espView.addText(x, y, text);
-		}
-	}
-
-	public static void drawESPLineColor(float x1, float y1, float x2, float y2, int color) {
-		if (espView != null && espEnabled) {
-			espView.addLine(x1, y1, x2, y2, color);
-		}
-	}
-
-	public static void drawESPBoxColor(float x, float y, float w, float h, int color) {
-		if (espView != null && espEnabled) {
-			espView.addBox(x, y, w, h, color);
-		}
-	}
-
-	public static void drawESPTextColor(float x, float y, String text, int color) {
-		if (espView != null && espEnabled) {
-			espView.addText(x, y, text, color);
-		}
-	}
-
-	public static void clearESP() {
-		if (espView != null) {
-			espView.clearAll();
-		}
-	}
+// ==================== ESP CONTROL ==================== //
 
 	public static void setESPEnabled(boolean enabled) {
 		espEnabled = enabled;
 		if (espView != null) {
 			espView.setDrawing(enabled);
-			if (!enabled) {
-				espView.clearAll();
-				espView.refresh();
-			}
-		}
-	}
-
-	public static void updateESP() {
-		if (espView != null) {
-			espView.refresh();
 		}
 	}
 
@@ -272,8 +290,8 @@ public class Menu {
 	}
 
 	public void destroyESP() {
-		if (espHandler != null && espRunnable != null) {
-			espHandler.removeCallbacks(espRunnable);
+		if (espHandler != null) {
+			espHandler.removeCallbacksAndMessages(null);
 		}
 
 		if (espView != null && espWindowManager != null) {
@@ -285,81 +303,85 @@ public class Menu {
 			espView = null;
 		}
 	}
-
+	
     //================== ICON SETUP ==================//
 
     private void setupIcon(Context context) {
-        View ring = new View(context);
-        FrameLayout.LayoutParams ringParams = new FrameLayout.LayoutParams(dp(ICON_SIZE), dp(ICON_SIZE));
-        ring.setLayoutParams(ringParams);
+		// Ring + inner background
+		View ring = new View(context);
+		FrameLayout.LayoutParams ringParams = new FrameLayout.LayoutParams(dp(ICON_SIZE), dp(ICON_SIZE));
+		ring.setLayoutParams(ringParams);
+		GradientDrawable ringBg = new GradientDrawable();
+		ringBg.setShape(GradientDrawable.OVAL);
+		ringBg.setColor(Color.TRANSPARENT);
+		ringBg.setStroke(dp(3), ACCENT_PINK);
+		ring.setBackground(ringBg);
 
-        GradientDrawable ringBg = new GradientDrawable();
-        ringBg.setShape(GradientDrawable.OVAL);
-        ringBg.setColor(Color.TRANSPARENT);
-        ringBg.setStroke(dp(2), ACCENT_PINK);
-        ring.setBackground(ringBg);
+		View innerBg = new View(context);
+		FrameLayout.LayoutParams innerParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 8), dp(ICON_SIZE - 8));
+		innerParams.gravity = Gravity.CENTER;
+		innerBg.setLayoutParams(innerParams);
+		GradientDrawable innerDrawable = new GradientDrawable();
+		innerDrawable.setShape(GradientDrawable.OVAL);
+		innerDrawable.setColor(BG_SECONDARY);
+		innerBg.setBackground(innerDrawable);
 
-        View innerBg = new View(context);
-        FrameLayout.LayoutParams innerParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 6), dp(ICON_SIZE - 6));
-        innerParams.gravity = Gravity.CENTER;
-        innerBg.setLayoutParams(innerParams);
+		mCollapsed.addView(ring);
+		mCollapsed.addView(innerBg);
 
-        GradientDrawable innerDrawable = new GradientDrawable();
-        innerDrawable.setShape(GradientDrawable.OVAL);
-        innerDrawable.setColor(BG_SECONDARY);
-        innerBg.setBackground(innerDrawable);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            innerBg.setElevation(dp(4));
-        }
+		// ────────────────────────────────
+		// ICON YÜKLEME KISMI
+		// ────────────────────────────────
 
-        mCollapsed.addView(ring);
-        mCollapsed.addView(innerBg);
+		boolean useWebView = false;
+		String webData = null;
+		try { webData = IconWebViewData(); } catch (Throwable ignored) {}
 
-        String webViewData = null;
-        try {
-            webViewData = IconWebViewData();
-        } catch (Exception e) {
-            webViewData = null;
-        }
+		if (webData != null && webData.trim().length() > 10) {  // basit geçerlilik kontrolü
+			useWebView = true;
+		}
 
-        if (webViewData != null && !webViewData.isEmpty()) {
-            WebView wView = new WebView(context);
-            FrameLayout.LayoutParams wParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 12), dp(ICON_SIZE - 12));
-            wParams.gravity = Gravity.CENTER;
-            wView.setLayoutParams(wParams);
+		if (useWebView) {
+			WebView wView = new WebView(context);
+			FrameLayout.LayoutParams wParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 14), dp(ICON_SIZE - 14));
+			wParams.gravity = Gravity.CENTER;
+			wView.setLayoutParams(wParams);
 
-            int iconDisplaySize = ICON_SIZE - 12;
-            wView.loadData("<html><head><style>*{margin:0;padding:0;}</style></head>" +
-						   "<body><img src=\"" + webViewData + "\" width=\"" + iconDisplaySize + "\" height=\"" + iconDisplaySize + "\"></body></html>",
-						   "text/html", "utf-8");
-            wView.setBackgroundColor(0x00000000);
-            wView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+			wView.loadData(
+				"<html><body style='margin:0;padding:0;background:transparent;'>" +
+				"<img src='" + webData + "' width='100%' height='100%' style='object-fit:contain;'/>" +
+				"</body></html>",
+				"text/html", "utf-8"
+			);
+			wView.setBackgroundColor(Color.TRANSPARENT);
+			wView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+			mCollapsed.addView(wView);
+		} else {
+			ImageView iconImg = new ImageView(context);
+			FrameLayout.LayoutParams imgParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 16), dp(ICON_SIZE - 16));
+			imgParams.gravity = Gravity.CENTER;
+			iconImg.setLayoutParams(imgParams);
+			iconImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
-            mCollapsed.addView(wView);
-        } else {
-            ImageView iconImg = new ImageView(context);
-            FrameLayout.LayoutParams imgParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 16), dp(ICON_SIZE - 16));
-            imgParams.gravity = Gravity.CENTER;
-            iconImg.setLayoutParams(imgParams);
-            iconImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
+			String base64 = null;
+			try { base64 = Icon(); } catch (Throwable ignored) {}
 
-            try {
-                String iconData = Icon();
-                if (iconData != null && !iconData.isEmpty()) {
-                    byte[] decode = Base64.decode(iconData, Base64.DEFAULT);
-                    iconImg.setImageBitmap(BitmapFactory.decodeByteArray(decode, 0, decode.length));
-                }
-            } catch (Exception e) {
-                GradientDrawable fallback = new GradientDrawable();
-                fallback.setShape(GradientDrawable.OVAL);
-                fallback.setColor(ACCENT_PINK);
-                iconImg.setBackground(fallback);
-            }
+			if (base64 != null && base64.trim().length() > 20) {
+				try {
+					byte[] data = Base64.decode(base64, Base64.DEFAULT);
+					iconImg.setImageBitmap(BitmapFactory.decodeByteArray(data, 0, data.length));
+				} catch (Exception e) {
+					iconImg.setBackgroundColor(0xFFFF5252);
+				}
+			} else {
+				iconImg.setBackgroundColor(0xFFFF5252); // kırmızı fallback
+			}
+			mCollapsed.addView(iconImg);
+		}
 
-            mCollapsed.addView(iconImg);
-        }
-    }
-
+		// Test için çerçeve
+		// mCollapsed.setBackgroundColor(0x44FF4081);
+	}
     private void setupMenuStyle() {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_XL));

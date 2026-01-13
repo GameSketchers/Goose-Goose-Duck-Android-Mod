@@ -15,7 +15,7 @@ public class Main {
     static {
         // When you change the lib name, change also on Android.mk file
         // Both must have same name
-        System.loadLibrary("MyLibName");
+        System.loadLibrary("anonimbiri");
     }
 
     private static native void CheckOverlayPermission(Context context);
