@@ -352,10 +352,10 @@ RoleInfo GetRoleInfo(int roleId) {
         return info;
     }
     
-    // Dodo - ORANGE
+    // Dodo - YELLOW
     if (roleId == 3 || roleId == 34) {
         info.name = (roleId == 3) ? "Dodo" : "Dueling Dodo";
-        info.color = COLOR_ORANGE;
+        info.color = COLOR_YELLOW;
         return info;
     }
     

@@ -12,6 +12,9 @@ android {
             abiFilters 'armeabi-v7a', 'arm64-v8a'
         }
     }
+	androidResources {
+        noCompress 'obb'
+    }
     buildTypes {
         release {
             shrinkResources true
