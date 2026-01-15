@@ -828,7 +828,14 @@ void ClearAllESP() {
     
     ResetDroneViewDelay();
     
-    SetESPEnabled(false);
+    JNIEnv* env = GetJNIEnv();
+    if (env && g_BatchDrawMethod && g_MenuClass) {
+        jstring empty = env->NewStringUTF("");
+        if (empty) {
+            env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, empty);
+            env->DeleteLocalRef(empty);
+        }
+    }
 }
 
 // PlayableEntity.Update - RVA: 0x3DC28D8
