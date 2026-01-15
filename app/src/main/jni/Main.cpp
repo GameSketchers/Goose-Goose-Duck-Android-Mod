@@ -22,6 +22,7 @@
 bool AntiDeath = false;
 bool UnlimitedVision = false;
 bool NoCooldown = false;
+bool SeeGhosts = false;
 bool ESPEnabled = false;
 bool ESPLines = true;
 bool ESPBox = true;
@@ -47,6 +48,7 @@ void *localPlayerInstance = NULL;
 void *localPlayerObject = NULL;
 void *mainCameraObject = NULL;
 bool isInVotingScreen = false;
+bool isInSpotlightScreen = false;
 bool isInGame = false;
 bool isInLobby = true;
 int localPlayerRole = 0;
@@ -76,10 +78,6 @@ struct Vector3 { float x, y, z; };
 #define COLOR_CRIMSON  0xFFDC143C
 #define COLOR_TEAL     0xFF008080
 
-// ====================================================================================
-// OFFSETS - Source: dump.cs (Goose Goose Duck)
-// ====================================================================================
-
 // PlayableEntity (TypeDefIndex: 6285) - Handlers.GameHandlers.PlayerHandlers
 #define OFFSET_PE_NICKNAME           0x90
 #define OFFSET_PE_ISLOCAL            0x98
@@ -95,11 +93,12 @@ struct Vector3 { float x, y, z; };
 #define OFFSET_PE_ISDOWNED           0x180
 #define OFFSET_PE_INVENT             0x182
 #define OFFSET_PE_ISINVISIBLE        0x189
+#define OFFSET_PE_ISINPELICAN        0x18D
 #define OFFSET_PE_ISSPECTATOR        0x200
 #define OFFSET_PE_ISMORPHED          0x18F
 #define OFFSET_PE_ISRUNNING          0x121
 
-// GGDRole - Role type as short
+// GGDRole (TypeDefIndex: 5656) - Objects.PlayerRoles
 #define OFFSET_ROLE_TYPE             0x12
 
 // BetterPhotonTransformView - Position data
@@ -107,10 +106,11 @@ struct Vector3 { float x, y, z; };
 #define OFFSET_TV_LASTTRANSFORMPOS   0x38
 
 // LocalPlayer (TypeDefIndex: 6261) - Handlers.GameHandlers.PlayerHandlers
-#define OFFSET_LP_MAINCAMERA         0x78
-#define OFFSET_LP_INVOTINGSCREEN     0xC3
-
-// ====================================================================================
+#define OFFSET_LP_MAINCAMERA                0x78
+#define OFFSET_LP_INVOTINGSCREEN            0xC3
+#define OFFSET_LP_INVOTINGTRANSITION        0xC4
+#define OFFSET_LP_INGAMESTARTSPOTLIGHT      0xC5
+#define OFFSET_LP_INGAMEENDSPOTLIGHT        0xC6
 
 struct PlayerData {
     Vector2 position;
@@ -125,6 +125,7 @@ struct PlayerData {
     bool isDowned;
     bool inVent;
     bool isInvisible;
+    bool isInPelican;
     bool isSpectator;
     bool isMorphed;
     bool isRunning;
@@ -194,11 +195,9 @@ jmethodID g_GetScreenWidthMethod = NULL;
 jmethodID g_GetScreenHeightMethod = NULL;
 bool g_ESPReady = false;
 
-// LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C
 void (*OverrideOrthographicSize)(void*, float) = NULL;
-
-// PlayableEntity.TeleportTo - RVA: 0x3DD33EC
 void (*TeleportTo)(void*, Vector2, bool) = NULL;
+void (*SetCanSeeGhosts)(void*, bool) = NULL;
 
 JNIEnv* GetJNIEnv() {
     if (!g_JavaVM) return NULL;
@@ -278,50 +277,46 @@ float GetESPScale() {
     return g_ScreenHeight / (orthoSize * 2.0f);
 }
 
-// ====================================================================================
-// ROLE INFO - Source: dump.cs RoleType enum (TypeDefIndex: 1500)
-// ====================================================================================
-
 struct RoleInfo { const char* name; int color; };
 
 bool IsKillerRole(int roleId) {
     switch(roleId) {
-        case 2:   // Duck
-        case 9:   // Cannibal
-        case 10:  // Morphling
-        case 12:  // Silencer
-        case 14:  // LoverDuck
-        case 17:  // Professional
-        case 18:  // Spy
-        case 19:  // Mimic
-        case 23:  // Assassin
-        case 25:  // Hitman
-        case 27:  // Snitch
-        case 33:  // Demolitionist
-        case 36:  // GHDuck
-        case 38:  // DNDDuck
-        case 41:  // DNDMorphling
-        case 44:  // TTVampire
-        case 46:  // TTThrall
-        case 48:  // IdentityThief
-        case 51:  // Ninja
-        case 58:  // TTEThrall
-        case 59:  // TTMummy
-        case 60:  // SerialKiller
-        case 62:  // Warlock
-        case 65:  // EsperDuck
-        case 66:  // Stalker
-        case 74:  // BHCCrow
-        case 75:  // BHCSinEater
-        case 79:  // TLCIdentityThief
-        case 81:  // TLCCamoDuck
-        case 84:  // Carrier
-        case 85:  // Parasite
-        case 103: // Looter
-        case 104: // Sniper
-        case 106: // Hawk
-        case 108: // TTDrTurducken
-        case 109: // TTTurduckensMonster
+        case 2:
+        case 9:
+        case 10:
+        case 12:
+        case 14:
+        case 17:
+        case 18:
+        case 19:
+        case 23:
+        case 25:
+        case 27:
+        case 33:
+        case 36:
+        case 38:
+        case 41:
+        case 44:
+        case 46:
+        case 48:
+        case 51:
+        case 58:
+        case 59:
+        case 60:
+        case 62:
+        case 65:
+        case 66:
+        case 74:
+        case 75:
+        case 79:
+        case 81:
+        case 84:
+        case 85:
+        case 103:
+        case 104:
+        case 106:
+        case 108:
+        case 109:
             return true;
         default:
             return false;
@@ -331,42 +326,36 @@ bool IsKillerRole(int roleId) {
 RoleInfo GetRoleInfo(int roleId) {
     RoleInfo info;
     
-    // Pelican - GREEN
     if (roleId == 57) {
         info.name = "Pelican";
         info.color = COLOR_GREEN;
         return info;
     }
     
-    // Vulture - GREEN
     if (roleId == 16 || roleId == 40) {
         info.name = (roleId == 16) ? "Vulture" : "DND Vulture";
         info.color = COLOR_GREEN;
         return info;
     }
     
-    // Pigeon - ORANGE
     if (roleId == 21) {
         info.name = "Pigeon";
         info.color = COLOR_ORANGE;
         return info;
     }
     
-    // Dodo - YELLOW
     if (roleId == 3 || roleId == 34) {
         info.name = (roleId == 3) ? "Dodo" : "Dueling Dodo";
         info.color = COLOR_YELLOW;
         return info;
     }
     
-    // Falcon - ORANGE
     if (roleId == 24 || roleId == 39) {
         info.name = (roleId == 24) ? "Falcon" : "DND Falcon";
         info.color = COLOR_ORANGE;
         return info;
     }
     
-    // Killers - RED
     if (IsKillerRole(roleId)) {
         switch(roleId) {
             case 2: info.name = "Duck"; break;
@@ -411,7 +400,6 @@ RoleInfo GetRoleInfo(int roleId) {
         return info;
     }
     
-    // None and all innocents - WHITE
     switch(roleId) {
         case 0: info.name = "None"; break;
         case 1: info.name = "Goose"; break;
@@ -684,9 +672,10 @@ void RenderDebugPanelBatch() {
     BatchAddText(centerX, startY, buf, COLOR_YELLOW);
     startY += lineHeight;
     
-    snprintf(buf, sizeof(buf), "InGame:%c | Lobby:%c | Vote:%c | Players:%d", 
+    snprintf(buf, sizeof(buf), "InGame:%c | Lobby:%c | Vote:%c | Spotlight:%c | Players:%d", 
              isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', 
-             isInVotingScreen ? 'Y' : 'N', g_RenderPlayerCount);
+             isInVotingScreen ? 'Y' : 'N', isInSpotlightScreen ? 'Y' : 'N',
+             g_RenderPlayerCount);
     BatchAddText(centerX, startY, buf, COLOR_CYAN);
     startY += lineHeight;
     
@@ -711,6 +700,7 @@ void RenderDebugPanelBatch() {
         if (p->isDowned) flags[fi++] = 'D';
         if (p->inVent) flags[fi++] = 'V';
         if (p->isInvisible) flags[fi++] = 'I';
+        if (p->isInPelican) flags[fi++] = 'P';
         if (p->isSpectator) flags[fi++] = 'S';
         if (p->isMorphed) flags[fi++] = 'M';
         if (p->isRunning) flags[fi++] = 'R';
@@ -734,7 +724,7 @@ void RenderDebugPanelBatch() {
     
     if (startY < maxY - lineHeight) {
         startY += 10;
-        BatchAddText(centerX, startY, "Flags: L=Local G=Ghost D=Down V=Vent I=Invis S=Spec M=Morph R=Run K=Kill", COLOR_GRAY);
+        BatchAddText(centerX, startY, "Flags: L=Local G=Ghost D=Down V=Vent I=Invis P=Pelican S=Spec M=Morph R=Run K=Kill", COLOR_GRAY);
     }
 }
 
@@ -742,6 +732,7 @@ void RenderESPBatch() {
     if (!ESPEnabled) return;
     if (ESPHideInVote && isInVotingScreen) return;
     if (ESPHideInLobby && isInLobby) return;
+    if (isInSpotlightScreen) return;
     if (!isInGame) return;
     
     if (!g_ESPStabilized) {
@@ -757,14 +748,16 @@ void RenderESPBatch() {
     
     for (int i = 0; i < g_RenderPlayerCount; i++) {
         PlayerData* p = &g_RenderPlayers[i];
-        if (!p->isValid || p->isLocal || p->isGhost) continue;
+        if (!p->isValid || p->isLocal) continue;
+        if (p->isGhost && !SeeGhosts) continue;
+        if (p->isInPelican) continue;
         if (p->position.x == 0 && p->position.y == 0) continue;
         
         float sx, sy;
         WorldToScreen(p->position, localPos, scale, &sx, &sy);
         
         RoleInfo ri = GetRoleInfo(p->role);
-        int color = ri.color;
+        int color = p->isGhost ? COLOR_GRAY : ri.color;
         
         float dist = p->distanceToLocal;
         
@@ -838,7 +831,6 @@ void ClearAllESP() {
     }
 }
 
-// PlayableEntity.Update - RVA: 0x3DC28D8
 void (*old_Update)(void *instance);
 void Update(void *instance) {
     if (instance) {
@@ -887,6 +879,7 @@ void Update(void *instance) {
             p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
             p->inVent = *(bool*)((uintptr_t)instance + OFFSET_PE_INVENT);
             p->isInvisible = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINVISIBLE);
+            p->isInPelican = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINPELICAN);
             p->isSpectator = *(bool*)((uintptr_t)instance + OFFSET_PE_ISSPECTATOR);
             p->isMorphed = *(bool*)((uintptr_t)instance + OFFSET_PE_ISMORPHED);
             p->isRunning = *(bool*)((uintptr_t)instance + OFFSET_PE_ISRUNNING);
@@ -908,7 +901,6 @@ void Update(void *instance) {
     old_Update(instance);
 }
 
-// PlayableEntity.LateUpdate - RVA: 0x3DC368C
 void (*old_LateUpdate)(void *instance);
 void LateUpdate(void *instance) {
     old_LateUpdate(instance);
@@ -941,14 +933,12 @@ void LateUpdate(void *instance) {
     }
 }
 
-// PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
 void TurnIntoGhost(void *instance, int deathReason) {
     if (AntiDeath && instance == localPlayerInstance) return;
     old_TurnIntoGhost(instance, deathReason);
 }
 
-// LocalPlayer.Update - RVA: 0x3D986B8
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
     if (instance) {
@@ -957,7 +947,17 @@ void LocalPlayer_Update(void *instance) {
         void* cam = *(void**)((uintptr_t)instance + OFFSET_LP_MAINCAMERA);
         if (cam) mainCameraObject = cam;
         
-        isInVotingScreen = *(bool*)((uintptr_t)instance + OFFSET_LP_INVOTINGSCREEN);
+        bool inVote1 = *(bool*)((uintptr_t)instance + OFFSET_LP_INVOTINGSCREEN);
+        bool inVote2 = *(bool*)((uintptr_t)instance + OFFSET_LP_INVOTINGTRANSITION);
+        isInVotingScreen = inVote1 || inVote2;
+        
+        bool startSpotlight = *(bool*)((uintptr_t)instance + OFFSET_LP_INGAMESTARTSPOTLIGHT);
+        bool endSpotlight = *(bool*)((uintptr_t)instance + OFFSET_LP_INGAMEENDSPOTLIGHT);
+        isInSpotlightScreen = startSpotlight || endSpotlight;
+        
+        if (SeeGhosts && SetCanSeeGhosts) {
+            SetCanSeeGhosts(instance, true);
+        }
         
         if (DroneView && OverrideOrthographicSize) {
             ApplyDroneViewDelayed();
@@ -966,32 +966,27 @@ void LocalPlayer_Update(void *instance) {
     old_LocalPlayer_Update(instance);
 }
 
-// LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768
 float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
     float speed = old_GetPlayerSpeed(instance);
     return SpeedHack ? speed * SpeedMultiplier : speed;
 }
 
-// OnEnterVent - RVA: 0x3C55C94
 void (*old_OnEnterVent)(void *instance, void* vent, bool setCooldown);
 void OnEnterVent(void *instance, void* vent, bool setCooldown) {
     old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown);
 }
 
-// OnExitVent - RVA: 0x3C55D88
 void (*old_OnExitVent)(void *instance, void* vent, bool setCooldown);
 void OnExitVent(void *instance, void* vent, bool setCooldown) {
     old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown);
 }
 
-// SetVentCooldown - RVA: 0x3C548AC
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) {
     old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown);
 }
 
-// PlayableEntity.Despawn - RVA: 0x3DC5328
 void (*old_Despawn)(void *instance);
 void Despawn(void *instance) {
     if (instance) {
@@ -1006,43 +1001,43 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     
     const char *features[] = {
         OBFUSCATE("Category_Vision & Cooldown"),
-        OBFUSCATE("Toggle_Unlimited Vision"),              // 0
-        OBFUSCATE("Toggle_No Vent Cooldown"),              // 1
+        OBFUSCATE("Toggle_Unlimited Vision"),
+        OBFUSCATE("Toggle_No Vent Cooldown"),
+        OBFUSCATE("Toggle_See Ghosts"),
         
         OBFUSCATE("Category_Camera"),
-        OBFUSCATE("Toggle_Drone View"),                    // 2
-        OBFUSCATE("SeekBar_Zoom Level_5_25"),              // 3
+        OBFUSCATE("Toggle_Drone View"),
+        OBFUSCATE("SeekBar_Zoom Level_5_25"),
         
         OBFUSCATE("Category_ESP Settings"),
-        OBFUSCATE("Toggle_ESP Enabled"),                   // 4
-        OBFUSCATE("Toggle_True_ESP Lines"),                // 5
-        OBFUSCATE("Toggle_True_ESP Box"),                  // 6
-        OBFUSCATE("Toggle_True_ESP Distance"),             // 7
-        OBFUSCATE("Toggle_True_ESP Names"),                // 8
-        OBFUSCATE("Toggle_True_Edge Indicator"),           // 9
-        OBFUSCATE("Toggle_True_Hide in Vote Screen"),      // 10
-        OBFUSCATE("Toggle_Hide in Lobby"),                 // 11
+        OBFUSCATE("Toggle_ESP Enabled"),
+        OBFUSCATE("Toggle_True_ESP Lines"),
+        OBFUSCATE("Toggle_True_ESP Box"),
+        OBFUSCATE("Toggle_True_ESP Distance"),
+        OBFUSCATE("Toggle_True_ESP Names"),
+        OBFUSCATE("Toggle_True_Edge Indicator"),
+        OBFUSCATE("Toggle_True_Hide in Vote Screen"),
+        OBFUSCATE("Toggle_Hide in Lobby"),
         
         OBFUSCATE("Category_Teleport"),
-        OBFUSCATE("InputValue_999_Teleport X"),            // 12
-        OBFUSCATE("InputValue_999_Teleport Y"),            // 13
-        OBFUSCATE("Button_Set Current Position"),          // 14
-        OBFUSCATE("Button_Teleport Now"),                  // 15
+        OBFUSCATE("InputValue_999_Teleport X"),
+        OBFUSCATE("InputValue_999_Teleport Y"),
+        OBFUSCATE("Button_Set Current Position"),
+        OBFUSCATE("Button_Teleport Now"),
         
         OBFUSCATE("Category_Debug Panel"),
-        OBFUSCATE("Toggle_Show Debug Info"),               // 16
+        OBFUSCATE("Toggle_Show Debug Info"),
         
         OBFUSCATE("Category_Experimental [May Not Work]"),
-        OBFUSCATE("Toggle_Anti-Death [LOCAL]"),            // 17
-        OBFUSCATE("Toggle_Speed Boost [LOCAL]"),           // 18
-        OBFUSCATE("SeekBar_Speed Multiplier_10_40"),       // 19
-		
-		OBFUSCATE("Category_About"),
+        OBFUSCATE("Toggle_Anti-Death [LOCAL]"),
+        OBFUSCATE("Toggle_Speed Boost [LOCAL]"),
+        OBFUSCATE("SeekBar_Speed Multiplier_10_40"),
+        
+        OBFUSCATE("Category_About"),
         OBFUSCATE("RichTextView_<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
         OBFUSCATE("ButtonLink_YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
         OBFUSCATE("ButtonLink_Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
         OBFUSCATE("ButtonLink_GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
-
     };
 
     int count = sizeof(features) / sizeof(features[0]);
@@ -1069,6 +1064,12 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
             break;
             
         case 2:
+            SeeGhosts = boolean;
+            if (!boolean && localPlayerObject && SetCanSeeGhosts)
+                SetCanSeeGhosts(localPlayerObject, false);
+            break;
+            
+        case 3:
             DroneView = boolean;
             if (!boolean) {
                 DisableDroneView();
@@ -1077,14 +1078,14 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
             }
             break;
             
-        case 3:
+        case 4:
             DroneZoom = (float)value;
             if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize) {
                 OverrideOrthographicSize(localPlayerObject, DroneZoom);
             }
             break;
             
-        case 4:
+        case 5:
             ESPEnabled = boolean;
             if (boolean) {
                 g_ESPStabilized = false;
@@ -1093,44 +1094,44 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
             SetESPEnabled(boolean || DebugMode);
             break;
             
-        case 5: ESPLines = boolean; break;
-        case 6: ESPBox = boolean; break;
-        case 7: ESPDistance = boolean; break;
-        case 8: ESPName = boolean; break;
-        case 9: ESPEdgeIndicator = boolean; break;
-        case 10: ESPHideInVote = boolean; break;
-        case 11: ESPHideInLobby = boolean; break;
+        case 6: ESPLines = boolean; break;
+        case 7: ESPBox = boolean; break;
+        case 8: ESPDistance = boolean; break;
+        case 9: ESPName = boolean; break;
+        case 10: ESPEdgeIndicator = boolean; break;
+        case 11: ESPHideInVote = boolean; break;
+        case 12: ESPHideInLobby = boolean; break;
         
-        case 12:
+        case 13:
             TeleportX = (float)value;
             break;
             
-        case 13:
+        case 14:
             TeleportY = (float)value;
             break;
             
-        case 14:
+        case 15:
             btnSetPosition = true;
             break;
             
-        case 15:
+        case 16:
             btnTeleport = true;
             break;
         
-        case 16:
+        case 17:
             DebugMode = boolean;
             SetESPEnabled(boolean || ESPEnabled);
             break;
             
-        case 17:
+        case 18:
             AntiDeath = boolean;
             break;
             
-        case 18:
+        case 19:
             SpeedHack = boolean;
             break;
             
-        case 19:
+        case 20:
             SpeedMultiplier = (float)value / 10.0f;
             break;
     }
@@ -1149,22 +1150,14 @@ void hack_thread() {
     LOGI("%s loaded", (const char*)targetLibName);
 
 #if defined(__aarch64__)
-    // PlayableEntity.Update - RVA: 0x3DC28D8
+    // PlayableEntity hooks - RVA from dump.cs
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC28D8")), Update, old_Update);
-    
-    // PlayableEntity.LateUpdate - RVA: 0x3DC368C
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC368C")), LateUpdate, old_LateUpdate);
-    
-    // PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCE370")), TurnIntoGhost, old_TurnIntoGhost);
-    
-    // PlayableEntity.Despawn - RVA: 0x3DC5328
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC5328")), Despawn, old_Despawn);
     
-    // LocalPlayer.Update - RVA: 0x3D986B8
+    // LocalPlayer hooks - RVA from dump.cs
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D986B8")), LocalPlayer_Update, old_LocalPlayer_Update);
-    
-    // LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA7768")), GetPlayerSpeed, old_GetPlayerSpeed);
     
     // LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C
@@ -1173,13 +1166,12 @@ void hack_thread() {
     // PlayableEntity.TeleportTo - RVA: 0x3DD33EC
     TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DD33EC")));
     
-    // OnEnterVent - RVA: 0x3C55C94
+    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C
+    SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DAF83C")));
+    
+    // GGDRole hooks - RVA from dump.cs
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55C94")), OnEnterVent, old_OnEnterVent);
-    
-    // OnExitVent - RVA: 0x3C55D88
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55D88")), OnExitVent, old_OnExitVent);
-    
-    // SetVentCooldown - RVA: 0x3C548AC
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C548AC")), SetVentCooldown, old_SetVentCooldown);
     
     LOGI("All hooks installed!");
