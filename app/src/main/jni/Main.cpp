@@ -119,7 +119,7 @@ struct PlayerData {
     int role;
     int teamId;
     int entityNumber;
-    char name[64];
+    char name[128];  // UTF-8 için daha büyük buffer
     bool isValid;
     float distanceToLocal;
     bool isDowned;
@@ -173,12 +173,17 @@ inline void BatchAddBox(float x, float y, float w, float h, int color) {
 }
 
 inline void BatchAddText(float x, float y, const char* text, int color) {
-    if (!text || g_ESPBatchOffset >= MAX_ESP_BUFFER - 128) return;
-    char safeText[64];
+    if (!text || g_ESPBatchOffset >= MAX_ESP_BUFFER - 256) return;
+    
+    // Sadece virgül ve noktalı virgülü escape et (parse için gerekli)
+    char safeText[128];
     int j = 0;
-    for (int i = 0; text[i] && j < 62; i++) {
-        if (text[i] == ',' || text[i] == ';') safeText[j++] = '_';
-        else safeText[j++] = text[i];
+    for (int i = 0; text[i] && j < 126; i++) {
+        if (text[i] == ',' || text[i] == ';') {
+            safeText[j++] = ' ';  // Virgül ve noktalı virgülü boşluk yap
+        } else {
+            safeText[j++] = text[i];  // Diğer tüm karakterler (Türkçe dahil) olduğu gibi
+        }
     }
     safeText[j] = '\0';
     
@@ -208,31 +213,70 @@ JNIEnv* GetJNIEnv() {
     return env;
 }
 
-void WideCharToAscii(void* instance, char* outName, int maxLen) {
+/**
+ * UTF-16 (Unity string) -> UTF-8 dönüşümü
+ * Türkçe karakterler dahil tüm Unicode karakterleri destekler
+ */
+void WideCharToUTF8(void* instance, char* outName, int maxLen) {
     memset(outName, 0, maxLen);
     
     uintptr_t strPtr = *(uintptr_t*)((uintptr_t)instance + OFFSET_PE_NICKNAME);
-    if (!strPtr) { strcpy(outName, "Unknown"); return; }
+    if (!strPtr) { 
+        strcpy(outName, "Unknown"); 
+        return; 
+    }
     
     int length = *(int*)(strPtr + 0x10);
     uint16_t* chars = (uint16_t*)(strPtr + 0x14);
     
-    if (length <= 0 || length > 50) { strcpy(outName, "Player"); return; }
+    if (length <= 0 || length > 50) { 
+        strcpy(outName, "Player"); 
+        return; 
+    }
     
     int outIdx = 0;
-    for (int i = 0; i < length && outIdx < maxLen - 1; i++) {
+    for (int i = 0; i < length && outIdx < maxLen - 4; i++) {
         uint16_t c = chars[i];
-        if (c >= 0x20 && c <= 0x7E) outName[outIdx++] = (char)c;
-        else if (c == 0x011F || c == 0x011E) outName[outIdx++] = 'g';
-        else if (c == 0x0131) outName[outIdx++] = 'i';
-        else if (c == 0x0130) outName[outIdx++] = 'I';
-        else if (c == 0x015F || c == 0x015E) outName[outIdx++] = 's';
-        else if (c == 0x00FC || c == 0x00DC) outName[outIdx++] = 'u';
-        else if (c == 0x00F6 || c == 0x00D6) outName[outIdx++] = 'o';
-        else if (c == 0x00E7 || c == 0x00C7) outName[outIdx++] = 'c';
+        
+        if (c < 0x80) {
+            // ASCII (0x00-0x7F)
+            if (c >= 0x20) {  // Yazdırılabilir karakterler
+                outName[outIdx++] = (char)c;
+            }
+        } else if (c < 0x800) {
+            // 2-byte UTF-8 (0x80-0x7FF) - Türkçe karakterler burada
+            outName[outIdx++] = (char)(0xC0 | (c >> 6));
+            outName[outIdx++] = (char)(0x80 | (c & 0x3F));
+        } else if (c >= 0xD800 && c <= 0xDBFF) {
+            // Surrogate pair başlangıcı (emoji vb.)
+            if (i + 1 < length) {
+                uint16_t c2 = chars[i + 1];
+                if (c2 >= 0xDC00 && c2 <= 0xDFFF) {
+                    // 4-byte UTF-8
+                    uint32_t codepoint = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
+                    outName[outIdx++] = (char)(0xF0 | (codepoint >> 18));
+                    outName[outIdx++] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+                    outName[outIdx++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+                    outName[outIdx++] = (char)(0x80 | (codepoint & 0x3F));
+                    i++;  // Sonraki karakteri atla
+                }
+            }
+        } else if (c >= 0xDC00 && c <= 0xDFFF) {
+            // Yalnız surrogate, atla
+            continue;
+        } else {
+            // 3-byte UTF-8 (0x800-0xFFFF)
+            outName[outIdx++] = (char)(0xE0 | (c >> 12));
+            outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F));
+            outName[outIdx++] = (char)(0x80 | (c & 0x3F));
+        }
     }
-    if (outIdx == 0) strcpy(outName, "Player");
-    else outName[outIdx] = '\0';
+    
+    if (outIdx == 0) {
+        strcpy(outName, "Player");
+    } else {
+        outName[outIdx] = '\0';
+    }
 }
 
 int GetRoleType(void* instance) {
@@ -708,12 +752,11 @@ void RenderDebugPanelBatch() {
         flags[fi] = '\0';
         if (fi == 0) strcpy(flags, "-");
         
-        snprintf(buf, sizeof(buf), "#%02d %-8s %s(%d) T%d (%.1f|%.1f) %.0fm [%s]",
+        snprintf(buf, sizeof(buf), "#%02d %-12s %s(%d) T%d %.0fm [%s]",
                  p->entityNumber,
                  p->name,
                  ri.name, p->role,
                  p->teamId,
-                 p->position.x, p->position.y,
                  p->distanceToLocal,
                  flags);
         
@@ -796,7 +839,7 @@ void RenderESPBatch() {
             
             BatchAddBox(edgeX - 8, edgeY - 8, 16, 16, color);
             
-            char et[48];
+            char et[64];
             snprintf(et, sizeof(et), "%s %.0fm", p->name, dist);
             
             float tx = edgeX, ty = edgeY - 25;
@@ -874,7 +917,9 @@ void Update(void *instance) {
             p->role = GetRoleType(instance);
             p->teamId = *(int*)((uintptr_t)instance + OFFSET_PE_TEAMID);
             p->entityNumber = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
-            WideCharToAscii(instance, p->name, sizeof(p->name));
+            
+            // UTF-8 dönüşümü ile isim al (Türkçe karakter destekli)
+            WideCharToUTF8(instance, p->name, sizeof(p->name));
             
             p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
             p->inVent = *(bool*)((uintptr_t)instance + OFFSET_PE_INVENT);
@@ -1000,44 +1045,51 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     InitESP(env);
     
     const char *features[] = {
-        OBFUSCATE("Category_Vision & Cooldown"),
-        OBFUSCATE("Toggle_Unlimited Vision"),
-        OBFUSCATE("Toggle_No Vent Cooldown"),
-        OBFUSCATE("Toggle_See Ghosts"),
+        //shared===================== VISION & COOLDOWN =====================//
+        OBFUSCATE("Category_[EYE]Vision & Cooldown"),
+        OBFUSCATE("Toggle_[EYE]Unlimited Vision"),
+        OBFUSCATE("Toggle_[TIMER]No Vent Cooldown"),
+        OBFUSCATE("Toggle_[GHOST]See Ghosts"),
         
-        OBFUSCATE("Category_Camera"),
-        OBFUSCATE("Toggle_Drone View"),
-        OBFUSCATE("SeekBar_Zoom Level_5_25"),
+        //shared===================== CAMERA =====================//
+        OBFUSCATE("Category_[CAMERA]Camera"),
+        OBFUSCATE("Toggle_[ZOOM_IN]Drone View"),
+        OBFUSCATE("SeekBar_[SLIDER]Zoom Level_5_25"),
         
-        OBFUSCATE("Category_ESP Settings"),
-        OBFUSCATE("Toggle_ESP Enabled"),
-        OBFUSCATE("Toggle_True_ESP Lines"),
-        OBFUSCATE("Toggle_True_ESP Box"),
-        OBFUSCATE("Toggle_True_ESP Distance"),
-        OBFUSCATE("Toggle_True_ESP Names"),
-        OBFUSCATE("Toggle_True_Edge Indicator"),
-        OBFUSCATE("Toggle_True_Hide in Vote Screen"),
-        OBFUSCATE("Toggle_Hide in Lobby"),
+        //===================== ESP SETTINGS =====================//
+        OBFUSCATE("Category_[RADAR]ESP Settings"),
+        OBFUSCATE("Toggle_[RADAR]ESP Enabled"),
+        OBFUSCATE("Toggle_True_[TARGET]ESP Lines"),
+        OBFUSCATE("Toggle_True_[BOX]ESP Box"),
+        OBFUSCATE("Toggle_True_[MAP]ESP Distance"),
+        OBFUSCATE("Toggle_True_[USER]ESP Names"),
+        OBFUSCATE("Toggle_True_[COMPASS]Edge Indicator"),
+        OBFUSCATE("Toggle_True_[EYE_OFF]Hide in Vote Screen"),
+        OBFUSCATE("Toggle_[EYE_OFF]Hide in Lobby"),
         
-        OBFUSCATE("Category_Teleport"),
-        OBFUSCATE("InputValue_999_Teleport X"),
-        OBFUSCATE("InputValue_999_Teleport Y"),
-        OBFUSCATE("Button_Set Current Position"),
-        OBFUSCATE("Button_Teleport Now"),
+        //===================== TELEPORT =====================//
+        OBFUSCATE("Category_[LOCATION]Teleport"),
+        OBFUSCATE("InputValue_999_[MAP]Teleport X"),
+        OBFUSCATE("InputValue_999_[MAP]Teleport Y"),
+        OBFUSCATE("Button_[SAVE]Set Current Position"),
+        OBFUSCATE("Button_[ROCKET]Teleport Now"),
         
-        OBFUSCATE("Category_Debug Panel"),
-        OBFUSCATE("Toggle_Show Debug Info"),
+        //===================== DEBUG =====================//
+        OBFUSCATE("Category_[BUG]Debug Panel"),
+        OBFUSCATE("Toggle_[TERMINAL]Show Debug Info"),
         
-        OBFUSCATE("Category_Experimental [May Not Work]"),
-        OBFUSCATE("Toggle_Anti-Death [LOCAL]"),
-        OBFUSCATE("Toggle_Speed Boost [LOCAL]"),
-        OBFUSCATE("SeekBar_Speed Multiplier_10_40"),
+        //===================== EXPERIMENTAL =====================//
+        OBFUSCATE("Category_[FLASH]Experimental [May Not Work]"),
+        OBFUSCATE("Toggle_[SHIELD]Anti-Death [LOCAL]"),
+        OBFUSCATE("Toggle_[SPEED]Speed Boost [LOCAL]"),
+        OBFUSCATE("SeekBar_[SLIDER]Speed Multiplier_10_40"),
         
-        OBFUSCATE("Category_About"),
-        OBFUSCATE("RichTextView_<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
-        OBFUSCATE("ButtonLink_YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
-        OBFUSCATE("ButtonLink_Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
-        OBFUSCATE("ButtonLink_GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
+        //===================== ABOUT =====================//
+        OBFUSCATE("Category_[INFO]About"),
+        OBFUSCATE("RichTextView_[STAR]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
+        OBFUSCATE("ButtonLink_[YOUTUBE]YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
+        OBFUSCATE("ButtonLink_[GITHUB]Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
+        OBFUSCATE("ButtonLink_[LINK]GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
     };
 
     int count = sizeof(features) / sizeof(features[0]);

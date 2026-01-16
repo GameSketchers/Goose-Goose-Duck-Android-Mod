@@ -39,8 +39,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -56,6 +58,133 @@ public class Menu {
     private static Runnable espRunnable;
     private static boolean espEnabled = false;
     private static Menu instance;
+
+    //================== FONTS ==================//
+    private Typeface menuFont;      // M PLUS Rounded 1c
+    private Typeface iconFont;      // Remix Icon
+    private boolean fontsLoaded = false;
+
+	//================== REMIX ICON CODES (v3.5.0) ==================//
+
+    // Navigation & UI
+    public static final String ICON_SETTINGS = "\uF0E5";
+    public static final String ICON_BACK = "\uEA61";
+    public static final String ICON_MENU = "\uEF3E";
+    public static final String ICON_CLOSE = "\uEB98";
+    public static final String ICON_CHECK = "\uEB7A";
+    public static final String ICON_ADD = "\uEA12";
+    public static final String ICON_ARROW_UP = "\uEA77";
+    public static final String ICON_ARROW_DOWN = "\uEA4D";
+    public static final String ICON_ARROW_LEFT = "\uEA64";
+    public static final String ICON_ARROW_RIGHT = "\uEA6D";
+
+    // Toggle & Controls
+    public static final String ICON_TOGGLE = "\uF1D6";
+    public static final String ICON_CHECKBOX = "\uEB7F";
+    public static final String ICON_RADIO = "\uED34";
+    public static final String ICON_SLIDER = "\uEEB1";
+    public static final String ICON_INPUT = "\uECED";
+    public static final String ICON_DROPDOWN = "\uEA4D";
+
+    // Game & Mod Icons
+    public static final String ICON_EYE = "\uECB4";
+    public static final String ICON_EYE_OFF = "\uECB2";
+    public static final String ICON_SPEED = "\uF2AC";
+    public static final String ICON_GAMEPAD = "\uEC74";
+    public static final String ICON_TARGET = "\uECD3";
+    public static final String ICON_CROSSHAIR = "\uEA7C";
+    public static final String ICON_SHIELD = "\uEF88";
+    public static final String ICON_SWORD = "\uF264";
+    public static final String ICON_MAGIC = "\uEE50";
+    public static final String ICON_FLASH = "\uEC35";
+    public static final String ICON_FIRE = "\uEC33";
+    public static final String ICON_GHOST = "\uEC76";
+    public static final String ICON_SKULL = "\uF113";
+
+    // User & People
+    public static final String ICON_USER = "\uF254";
+    public static final String ICON_USERS = "\uF266";
+    public static final String ICON_SPY = "\uF13A";
+
+    // Location & Map
+    public static final String ICON_MAP = "\uEE6C";
+    public static final String ICON_LOCATION = "\uEE4A";
+    public static final String ICON_COMPASS = "\uEA95";
+    public static final String ICON_RADAR = "\uF492";
+    public static final String ICON_NAVIGATION = "\uEE98";
+
+    // System & Debug
+    public static final String ICON_BUG = "\uEA52";
+    public static final String ICON_CODE = "\uEA80";
+    public static final String ICON_TERMINAL = "\uF1FD";
+    public static final String ICON_CPU = "\uEA9D";
+    public static final String ICON_WIFI = "\uF2B6";
+    public static final String ICON_DATABASE = "\uEAAF";
+
+    // Actions
+    public static final String ICON_ROCKET = "\uEF48";
+    public static final String ICON_PLAY = "\uEFAA";
+    public static final String ICON_PAUSE = "\uEF68";
+    public static final String ICON_STOP = "\uF1A6";
+    public static final String ICON_REFRESH = "\uF1B3";
+    public static final String ICON_SAVE = "\uEF53";
+    public static final String ICON_DOWNLOAD = "\uEA57";
+    public static final String ICON_UPLOAD = "\uF248";
+
+    // Status & Info
+    public static final String ICON_STAR = "\uF185";
+    public static final String ICON_HEART = "\uED2E";
+    public static final String ICON_INFINITY = "\uED67";
+    public static final String ICON_TIMER = "\uF212";
+    public static final String ICON_INFO = "\uED5C";
+    public static final String ICON_WARNING = "\uEC53";
+    public static final String ICON_ERROR = "\uECA0";
+    public static final String ICON_SUCCESS = "\uEB81";
+
+    // Media & View
+    public static final String ICON_CAMERA = "\uEA5B";
+    public static final String ICON_VIDEO = "\uF26A";
+    public static final String ICON_ZOOM_IN = "\uF2E6";
+    public static final String ICON_ZOOM_OUT = "\uF2E8";
+    public static final String ICON_FULLSCREEN = "\uECB9";
+    public static final String ICON_PICTURE = "\uED80";
+
+    // Security
+    public static final String ICON_LOCK = "\uEE12";
+    public static final String ICON_UNLOCK = "\uF242";
+    public static final String ICON_KEY = "\uEDBB";
+    public static final String ICON_FINGERPRINT = "\uEC2D";
+
+    // Premium & Special
+    public static final String ICON_CROWN = "\uEAA5";
+    public static final String ICON_VIP = "\uF270";
+    public static final String ICON_GIFT = "\uECC6";
+    public static final String ICON_TROPHY = "\uF228";
+
+    // Files & Folders
+    public static final String ICON_FOLDER = "\uECBC";
+    public static final String ICON_FILE = "\uEC57";
+    public static final String ICON_BOX = "\uEA36";
+
+    // Edit
+    public static final String ICON_PENCIL = "\uEFDF";
+    public static final String ICON_ERASER = "\uEC6A";
+    public static final String ICON_PALETTE = "\uEF5B";
+
+    // Links & External
+    public static final String ICON_LINK = "\uEDFC";
+    public static final String ICON_EXTERNAL = "\uEC90";
+    public static final String ICON_SHARE = "\uEF88";
+    public static final String ICON_GITHUB = "\uECC6";
+    public static final String ICON_YOUTUBE = "\uF2EA";
+
+    // Category & Collapse
+    public static final String ICON_APPS = "\uEA08";
+    public static final String ICON_DASHBOARD = "\uEAB2";
+    public static final String ICON_LIST = "\uEDE9";
+
+    // İkon-renk eşleştirme
+    private static final Map<String, Integer> ICON_COLORS = new HashMap<>();
 
     //================== SOFT DARK ANIME PALETTE ==================//
     int BG_PRIMARY = Color.parseColor("#FF16141F");
@@ -119,6 +248,12 @@ public class Menu {
         instance = this;
         Preferences.context = context;
 
+        // Fontları yükle
+        loadFonts(context);
+
+        // İkon renklerini ayarla
+        initIconColors();
+
         rootFrame = new FrameLayout(context);
         mRootContainer = new RelativeLayout(context);
 
@@ -171,217 +306,268 @@ public class Menu {
         Init(context, (TextView) header.getChildAt(0), subtitle);
     }
 
+    //================== FONT LOADING ==================//
+
+    private void loadFonts(Context context) {
+        try {
+            // Assets klasöründen fontları yükle
+            menuFont = Typeface.createFromAsset(context.getAssets(), "fonts/MPLUSRounded1c-Medium.ttf");
+            iconFont = Typeface.createFromAsset(context.getAssets(), "fonts/remixicon.ttf");
+            fontsLoaded = true;
+        } catch (Exception e) {
+            // Font yüklenemezse varsayılan fontları kullan
+            menuFont = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+            iconFont = Typeface.DEFAULT;
+            fontsLoaded = false;
+            e.printStackTrace();
+        }
+    }
+
+    private void initIconColors() {
+        ICON_COLORS.put(ICON_EYE, ACCENT_BLUE);
+        ICON_COLORS.put(ICON_SPEED, ACCENT_MINT);
+        ICON_COLORS.put(ICON_SHIELD, ACCENT_PURPLE);
+        ICON_COLORS.put(ICON_TARGET, ACCENT_ROSE);
+        ICON_COLORS.put(ICON_GHOST, ACCENT_PURPLE);
+        ICON_COLORS.put(ICON_FIRE, ACCENT_PEACH);
+        ICON_COLORS.put(ICON_FLASH, ACCENT_MINT);
+        ICON_COLORS.put(ICON_RADAR, ACCENT_BLUE);
+        ICON_COLORS.put(ICON_LOCATION, ACCENT_PINK);
+        ICON_COLORS.put(ICON_SETTINGS, ACCENT_PURPLE);
+        ICON_COLORS.put(ICON_BUG, ACCENT_ROSE);
+        ICON_COLORS.put(ICON_ROCKET, ACCENT_PEACH);
+        // Varsayılan renk ACCENT_PINK
+    }
+
+    private int getIconColor(String icon) {
+        Integer color = ICON_COLORS.get(icon);
+        return color != null ? color : ACCENT_PINK;
+    }
+
+    // Typeface getter'ları
+    public Typeface getMenuFont() {
+        return menuFont;
+    }
+
+    public Typeface getIconFont() {
+        return iconFont;
+    }
+
     //================== ESP SYSTEM METHODS ==================//
 
-	public void initESP() {
-		if (espView != null) return;
+    public void initESP() {
+        if (espView != null) return;
 
-		try {
-			espWindowManager = (WindowManager) getContext.getSystemService(Context.WINDOW_SERVICE);
-			espView = new ESPView(getContext);
-			espWindowManager.addView(espView, ESPView.createLayoutParams());
+        try {
+            espWindowManager = (WindowManager) getContext.getSystemService(Context.WINDOW_SERVICE);
+            espView = new ESPView(getContext);
+            espWindowManager.addView(espView, ESPView.createLayoutParams());
 
-			// Choreographer ESPView içinde zaten çalışıyor
-			// Handler sadece fallback için tutuluyor
-			espHandler = new Handler(Looper.getMainLooper());
+            espHandler = new Handler(Looper.getMainLooper());
 
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
-// ==================== BATCH ESP DRAWING ==================== //
+    public static void batchDrawESP(String data) {
+        if (espView == null) return;
 
-	public static void batchDrawESP(String data) {
-		if (espView == null) return;
+        espView.clearAll();
 
-		// Her zaman temizle
-		espView.clearAll();
+        if (!espEnabled || data == null || data.isEmpty()) {
+            espView.refresh();
+            return;
+        }
 
-		// Eğer data boş veya null ise sadece temizle ve refresh et
-		if (!espEnabled || data == null || data.isEmpty()) {
-			espView.refresh();
-			return;
-		}
+        String[] items = data.split(";");
 
-		// Parse et
-		String[] items = data.split(";");
+        for (String item : items) {
+            if (item.isEmpty() || item.length() < 2) continue;
 
-		for (String item : items) {
-			if (item.isEmpty() || item.length() < 2) continue;
+            try {
+                char type = item.charAt(0);
+                String content = item.substring(1);
+                String[] parts = content.split(",");
 
-			try {
-				char type = item.charAt(0);
-				String content = item.substring(1);
-				String[] parts = content.split(",");
+                switch (type) {
+                    case 'L':
+                        if (parts.length >= 5) {
+                            espView.addLine(
+                                Float.parseFloat(parts[0]),
+                                Float.parseFloat(parts[1]),
+                                Float.parseFloat(parts[2]),
+                                Float.parseFloat(parts[3]),
+                                parseColor(parts[4])
+                            );
+                        }
+                        break;
 
-				switch (type) {
-					case 'L':
-						if (parts.length >= 5) {
-							espView.addLine(
-								Float.parseFloat(parts[0]),
-								Float.parseFloat(parts[1]),
-								Float.parseFloat(parts[2]),
-								Float.parseFloat(parts[3]),
-								parseColor(parts[4])
-							);
-						}
-						break;
+                    case 'B':
+                        if (parts.length >= 5) {
+                            espView.addBox(
+                                Float.parseFloat(parts[0]),
+                                Float.parseFloat(parts[1]),
+                                Float.parseFloat(parts[2]),
+                                Float.parseFloat(parts[3]),
+                                parseColor(parts[4])
+                            );
+                        }
+                        break;
 
-					case 'B':
-						if (parts.length >= 5) {
-							espView.addBox(
-								Float.parseFloat(parts[0]),
-								Float.parseFloat(parts[1]),
-								Float.parseFloat(parts[2]),
-								Float.parseFloat(parts[3]),
-								parseColor(parts[4])
-							);
-						}
-						break;
+                    case 'T':
+                        if (parts.length >= 4) {
+                            espView.addText(
+                                Float.parseFloat(parts[0]),
+                                Float.parseFloat(parts[1]),
+                                parts[2],
+                                parseColor(parts[3])
+                            );
+                        }
+                        break;
+                }
+            } catch (Exception e) {
+                // Parse error, skip
+            }
+        }
 
-					case 'T':
-						if (parts.length >= 4) {
-							espView.addText(
-								Float.parseFloat(parts[0]),
-								Float.parseFloat(parts[1]),
-								parts[2],
-								parseColor(parts[3])
-							);
-						}
-						break;
-				}
-			} catch (Exception e) {
-				// Parse error, skip
-			}
-		}
+        espView.refresh();
+    }
 
-		espView.refresh();
-	}
+    private static int parseColor(String colorStr) {
+        try {
+            return (int) Long.parseLong(colorStr.trim());
+        } catch (Exception e) {
+            return 0xFFFFFFFF;
+        }
+    }
 
-	private static int parseColor(String colorStr) {
-		try {
-			return (int) Long.parseLong(colorStr.trim());
-		} catch (Exception e) {
-			return 0xFFFFFFFF;
-		}
-	}
-// ==================== ESP CONTROL ==================== //
+    public static void setESPEnabled(boolean enabled) {
+        espEnabled = enabled;
+        if (espView != null) {
+            espView.setDrawing(enabled);
+        }
+    }
 
-	public static void setESPEnabled(boolean enabled) {
-		espEnabled = enabled;
-		if (espView != null) {
-			espView.setDrawing(enabled);
-		}
-	}
+    public static int getScreenWidth() {
+        if (espView != null) {
+            return espView.getRealWidth();
+        }
+        return 1080;
+    }
 
-	public static int getScreenWidth() {
-		if (espView != null) {
-			return espView.getRealWidth();
-		}
-		return 1080;
-	}
+    public static int getScreenHeight() {
+        if (espView != null) {
+            return espView.getRealHeight();
+        }
+        return 2400;
+    }
 
-	public static int getScreenHeight() {
-		if (espView != null) {
-			return espView.getRealHeight();
-		}
-		return 2400;
-	}
+    public void destroyESP() {
+        if (espHandler != null) {
+            espHandler.removeCallbacksAndMessages(null);
+        }
 
-	public void destroyESP() {
-		if (espHandler != null) {
-			espHandler.removeCallbacksAndMessages(null);
-		}
+        if (espView != null && espWindowManager != null) {
+            try {
+                espWindowManager.removeView(espView);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            espView = null;
+        }
+    }
 
-		if (espView != null && espWindowManager != null) {
-			try {
-				espWindowManager.removeView(espView);
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			espView = null;
-		}
-	}
-	
+    //================== ICON HELPER ==================//
+
+    private TextView createIconView(String iconCode, int color) {
+        TextView iconView = new TextView(getContext);
+        iconView.setText(iconCode);
+        iconView.setTextColor(color);
+        iconView.setTextSize(16f);
+        iconView.setTypeface(iconFont);
+        iconView.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(24), dp(24));
+        params.setMargins(0, 0, dp(10), 0);
+        iconView.setLayoutParams(params);
+        return iconView;
+    }
+
+    private TextView createIconView(String iconCode) {
+        return createIconView(iconCode, getIconColor(iconCode));
+    }
+
     //================== ICON SETUP ==================//
 
     private void setupIcon(Context context) {
-		// Ring + inner background
-		View ring = new View(context);
-		FrameLayout.LayoutParams ringParams = new FrameLayout.LayoutParams(dp(ICON_SIZE), dp(ICON_SIZE));
-		ring.setLayoutParams(ringParams);
-		GradientDrawable ringBg = new GradientDrawable();
-		ringBg.setShape(GradientDrawable.OVAL);
-		ringBg.setColor(Color.TRANSPARENT);
-		ringBg.setStroke(dp(3), ACCENT_PINK);
-		ring.setBackground(ringBg);
+        View ring = new View(context);
+        FrameLayout.LayoutParams ringParams = new FrameLayout.LayoutParams(dp(ICON_SIZE), dp(ICON_SIZE));
+        ring.setLayoutParams(ringParams);
+        GradientDrawable ringBg = new GradientDrawable();
+        ringBg.setShape(GradientDrawable.OVAL);
+        ringBg.setColor(Color.TRANSPARENT);
+        ringBg.setStroke(dp(3), ACCENT_PINK);
+        ring.setBackground(ringBg);
 
-		View innerBg = new View(context);
-		FrameLayout.LayoutParams innerParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 8), dp(ICON_SIZE - 8));
-		innerParams.gravity = Gravity.CENTER;
-		innerBg.setLayoutParams(innerParams);
-		GradientDrawable innerDrawable = new GradientDrawable();
-		innerDrawable.setShape(GradientDrawable.OVAL);
-		innerDrawable.setColor(BG_SECONDARY);
-		innerBg.setBackground(innerDrawable);
+        View innerBg = new View(context);
+        FrameLayout.LayoutParams innerParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 8), dp(ICON_SIZE - 8));
+        innerParams.gravity = Gravity.CENTER;
+        innerBg.setLayoutParams(innerParams);
+        GradientDrawable innerDrawable = new GradientDrawable();
+        innerDrawable.setShape(GradientDrawable.OVAL);
+        innerDrawable.setColor(BG_SECONDARY);
+        innerBg.setBackground(innerDrawable);
 
-		mCollapsed.addView(ring);
-		mCollapsed.addView(innerBg);
+        mCollapsed.addView(ring);
+        mCollapsed.addView(innerBg);
 
-		// ────────────────────────────────
-		// ICON YÜKLEME KISMI
-		// ────────────────────────────────
+        boolean useWebView = false;
+        String webData = null;
+        try { webData = IconWebViewData(); } catch (Throwable ignored) {}
 
-		boolean useWebView = false;
-		String webData = null;
-		try { webData = IconWebViewData(); } catch (Throwable ignored) {}
+        if (webData != null && webData.trim().length() > 10) {
+            useWebView = true;
+        }
 
-		if (webData != null && webData.trim().length() > 10) {  // basit geçerlilik kontrolü
-			useWebView = true;
-		}
+        if (useWebView) {
+            WebView wView = new WebView(context);
+            FrameLayout.LayoutParams wParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 14), dp(ICON_SIZE - 14));
+            wParams.gravity = Gravity.CENTER;
+            wView.setLayoutParams(wParams);
 
-		if (useWebView) {
-			WebView wView = new WebView(context);
-			FrameLayout.LayoutParams wParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 14), dp(ICON_SIZE - 14));
-			wParams.gravity = Gravity.CENTER;
-			wView.setLayoutParams(wParams);
+            wView.loadData(
+                "<html><body style='margin:0;padding:0;background:transparent;'>" +
+                "<img src='" + webData + "' width='100%' height='100%' style='object-fit:contain;'/>" +
+                "</body></html>",
+                "text/html", "utf-8"
+            );
+            wView.setBackgroundColor(Color.TRANSPARENT);
+            wView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+            mCollapsed.addView(wView);
+        } else {
+            ImageView iconImg = new ImageView(context);
+            FrameLayout.LayoutParams imgParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 16), dp(ICON_SIZE - 16));
+            imgParams.gravity = Gravity.CENTER;
+            iconImg.setLayoutParams(imgParams);
+            iconImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
-			wView.loadData(
-				"<html><body style='margin:0;padding:0;background:transparent;'>" +
-				"<img src='" + webData + "' width='100%' height='100%' style='object-fit:contain;'/>" +
-				"</body></html>",
-				"text/html", "utf-8"
-			);
-			wView.setBackgroundColor(Color.TRANSPARENT);
-			wView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
-			mCollapsed.addView(wView);
-		} else {
-			ImageView iconImg = new ImageView(context);
-			FrameLayout.LayoutParams imgParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 16), dp(ICON_SIZE - 16));
-			imgParams.gravity = Gravity.CENTER;
-			iconImg.setLayoutParams(imgParams);
-			iconImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            String base64 = null;
+            try { base64 = Icon(); } catch (Throwable ignored) {}
 
-			String base64 = null;
-			try { base64 = Icon(); } catch (Throwable ignored) {}
+            if (base64 != null && base64.trim().length() > 20) {
+                try {
+                    byte[] data = Base64.decode(base64, Base64.DEFAULT);
+                    iconImg.setImageBitmap(BitmapFactory.decodeByteArray(data, 0, data.length));
+                } catch (Exception e) {
+                    iconImg.setBackgroundColor(0xFFFF5252);
+                }
+            } else {
+                iconImg.setBackgroundColor(0xFFFF5252);
+            }
+            mCollapsed.addView(iconImg);
+        }
+    }
 
-			if (base64 != null && base64.trim().length() > 20) {
-				try {
-					byte[] data = Base64.decode(base64, Base64.DEFAULT);
-					iconImg.setImageBitmap(BitmapFactory.decodeByteArray(data, 0, data.length));
-				} catch (Exception e) {
-					iconImg.setBackgroundColor(0xFFFF5252);
-				}
-			} else {
-				iconImg.setBackgroundColor(0xFFFF5252); // kırmızı fallback
-			}
-			mCollapsed.addView(iconImg);
-		}
-
-		// Test için çerçeve
-		// mCollapsed.setBackgroundColor(0x44FF4081);
-	}
     private void setupMenuStyle() {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_XL));
@@ -394,7 +580,7 @@ public class Menu {
         mExpanded.setClipToOutline(true);
     }
 
-    //================== HEADER ==================//
+	//================== HEADER ==================//
 
     private LinearLayout buildHeader(Context context) {
         LinearLayout header = new LinearLayout(context);
@@ -407,13 +593,14 @@ public class Menu {
         TextView title = new TextView(context);
         title.setTextColor(TEXT_PRIMARY);
         title.setTextSize(16f);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        title.setTypeface(menuFont, Typeface.BOLD);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
 
-        TextView settingsBtn = new TextView(context);
-        settingsBtn.setText(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? "⚙" : "☰");
+        final TextView settingsBtn = new TextView(context);
+        settingsBtn.setText(ICON_SETTINGS);  // Gear ikonu
         settingsBtn.setTextColor(ACCENT_PURPLE);
-        settingsBtn.setTextSize(18f);
+        settingsBtn.setTextSize(22f);
+        settingsBtn.setTypeface(iconFont);
         settingsBtn.setPadding(dp(12), dp(4), dp(4), dp(4));
 
         settingsBtn.setOnClickListener(new View.OnClickListener() {
@@ -433,7 +620,8 @@ public class Menu {
 							}
 						}).start();
 
-					((TextView) v).setText(isSettings ? "←" : (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? "⚙" : "☰"));
+					// Settings açıkken BACK ikonu, kapalıyken SETTINGS ikonu
+					settingsBtn.setText(isSettings ? ICON_BACK : ICON_SETTINGS);
 				}
 			});
 
@@ -442,7 +630,7 @@ public class Menu {
 
         return header;
     }
-
+	
     private TextView buildSubtitle(Context context) {
         TextView sub = new TextView(context);
         sub.setEllipsize(TextUtils.TruncateAt.MARQUEE);
@@ -451,6 +639,7 @@ public class Menu {
         sub.setSelected(true);
         sub.setTextColor(TEXT_MUTED);
         sub.setTextSize(10f);
+        sub.setTypeface(menuFont);
         sub.setGravity(Gravity.CENTER);
         sub.setPadding(dp(PADDING), 0, dp(PADDING), dp(10));
         return sub;
@@ -477,33 +666,48 @@ public class Menu {
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, dp(40), 1);
         btnParams.setMargins(dp(6), 0, dp(6), 0);
 
-        TextView hideBtn = new TextView(context);
+        // Hide Button
+        LinearLayout hideBtn = new LinearLayout(context);
         hideBtn.setLayoutParams(btnParams);
-        hideBtn.setText("Hide");
-        hideBtn.setTextColor(TEXT_SECONDARY);
-        hideBtn.setTextSize(13f);
         hideBtn.setGravity(Gravity.CENTER);
+        hideBtn.setOrientation(LinearLayout.HORIZONTAL);
 
         GradientDrawable hideBg = new GradientDrawable();
         hideBg.setCornerRadius(dp(RADIUS_M));
         hideBg.setColor(BG_CARD);
         hideBtn.setBackground(hideBg);
 
+        TextView hideIcon = new TextView(context);
+        hideIcon.setText(ICON_EYE_OFF);
+        hideIcon.setTextColor(TEXT_SECONDARY);
+        hideIcon.setTextSize(14f);
+        hideIcon.setTypeface(iconFont);
+
+        TextView hideText = new TextView(context);
+        hideText.setText("Hide");
+        hideText.setTextColor(TEXT_SECONDARY);
+        hideText.setTextSize(13f);
+        hideText.setTypeface(menuFont);
+        hideText.setPadding(dp(6), 0, 0, 0);
+
+        hideBtn.addView(hideIcon);
+        hideBtn.addView(hideText);
+
         hideBtn.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
 					mExpanded.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
-                        .setDuration(200).withEndAction(new Runnable() {
-                            @Override
-                            public void run() {
-                                mExpanded.setVisibility(View.GONE);
-                                mExpanded.setAlpha(1f);
-                                mExpanded.setScaleX(1f);
-                                mExpanded.setScaleY(1f);
-                                mCollapsed.setVisibility(View.VISIBLE);
-                                mCollapsed.setAlpha(0f);
-                            }
-                        }).start();
+						.setDuration(200).withEndAction(new Runnable() {
+							@Override
+							public void run() {
+								mExpanded.setVisibility(View.GONE);
+								mExpanded.setAlpha(1f);
+								mExpanded.setScaleX(1f);
+								mExpanded.setScaleY(1f);
+								mCollapsed.setVisibility(View.VISIBLE);
+								mCollapsed.setAlpha(0f);
+							}
+						}).start();
 					Toast.makeText(getContext, "Icon hidden. Remember position!", Toast.LENGTH_LONG).show();
 				}
 			});
@@ -522,35 +726,52 @@ public class Menu {
 				}
 			});
 
-        TextView closeBtn = new TextView(context);
+        // Close Button
+        LinearLayout closeBtn = new LinearLayout(context);
         closeBtn.setLayoutParams(btnParams);
-        closeBtn.setText("Close");
-        closeBtn.setTextColor(BG_PRIMARY);
-        closeBtn.setTextSize(13f);
-        closeBtn.setTypeface(Typeface.DEFAULT_BOLD);
         closeBtn.setGravity(Gravity.CENTER);
+        closeBtn.setOrientation(LinearLayout.HORIZONTAL);
 
         GradientDrawable closeBg = new GradientDrawable();
         closeBg.setCornerRadius(dp(RADIUS_M));
         closeBg.setColor(ACCENT_PINK);
         closeBtn.setBackground(closeBg);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            closeBtn.setElevation(dp(2));
+        }
+
+        TextView closeIcon = new TextView(context);
+        closeIcon.setText(ICON_CLOSE);
+        closeIcon.setTextColor(BG_PRIMARY);
+        closeIcon.setTextSize(14f);
+        closeIcon.setTypeface(iconFont);
+
+        TextView closeText = new TextView(context);
+        closeText.setText("Close");
+        closeText.setTextColor(BG_PRIMARY);
+        closeText.setTextSize(13f);
+        closeText.setTypeface(menuFont, Typeface.BOLD);
+        closeText.setPadding(dp(6), 0, 0, 0);
+
+        closeBtn.addView(closeIcon);
+        closeBtn.addView(closeText);
 
         closeBtn.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
 					mExpanded.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
-                        .setDuration(200).setInterpolator(new DecelerateInterpolator())
-                        .withEndAction(new Runnable() {
-                            @Override
-                            public void run() {
-                                mExpanded.setVisibility(View.GONE);
-                                mExpanded.setAlpha(1f);
-                                mExpanded.setScaleX(1f);
-                                mExpanded.setScaleY(1f);
-                                mCollapsed.setVisibility(View.VISIBLE);
-                                mCollapsed.setAlpha(ICON_ALPHA);
-                            }
-                        }).start();
+						.setDuration(200).setInterpolator(new DecelerateInterpolator())
+						.withEndAction(new Runnable() {
+							@Override
+							public void run() {
+								mExpanded.setVisibility(View.GONE);
+								mExpanded.setAlpha(1f);
+								mExpanded.setScaleX(1f);
+								mExpanded.setScaleY(1f);
+								mCollapsed.setVisibility(View.VISIBLE);
+								mCollapsed.setAlpha(ICON_ALPHA);
+							}
+						}).start();
 				}
 			});
 
@@ -580,24 +801,30 @@ public class Menu {
         return card;
     }
 
-    //================== SWITCH ==================//
+	//================== SWITCH ==================//
 
-    private void Switch(LinearLayout parent, final int featNum, final String featName, boolean defaultOn) {
+    private void Switch(LinearLayout parent, final int featNum, final String featName, boolean defaultOn, String icon, int iconColor) {
         LinearLayout card = makeCard(false);
 
-        View dot = new View(getContext);
-        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(4), dp(28));
-        dotParams.setMargins(0, 0, dp(12), 0);
-        dot.setLayoutParams(dotParams);
-        GradientDrawable dotBg = new GradientDrawable();
-        dotBg.setCornerRadius(dp(2));
-        dotBg.setColor(ACCENT_PINK);
-        dot.setBackground(dotBg);
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(18f);
+            iconView.setTypeface(iconFont);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(24), dp(24));
+            iconParams.setMargins(0, 0, dp(10), 0);
+            iconView.setLayoutParams(iconParams);
+            iconView.setGravity(Gravity.CENTER);
+            card.addView(iconView);
+        }
 
         TextView label = new TextView(getContext);
         label.setText(featName);
         label.setTextColor(TEXT_PRIMARY);
         label.setTextSize(14f);
+        label.setTypeface(menuFont);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
 
         final FrameLayout switchFrame = new FrameLayout(getContext);
@@ -636,7 +863,6 @@ public class Menu {
 
         card.setOnClickListener(toggle);
 
-        card.addView(dot);
         card.addView(label);
         card.addView(switchFrame);
         parent.addView(card);
@@ -681,9 +907,9 @@ public class Menu {
         }
     }
 
-    //================== SEEKBAR ==================//
+	//================== SEEKBAR ==================//
 
-    private void SeekBar(LinearLayout parent, final int featNum, final String featName, final int min, final int max) {
+    private void SeekBar(LinearLayout parent, final int featNum, final String featName, final int min, final int max, String icon, int iconColor) {
         int current = Preferences.loadPrefInt(featName, featNum);
         if (current < min) current = min;
 
@@ -692,28 +918,35 @@ public class Menu {
         LinearLayout header = new LinearLayout(getContext);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
-        View dot = new View(getContext);
-        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(6), dp(6));
-        dotParams.setMargins(0, 0, dp(8), 0);
-        dot.setLayoutParams(dotParams);
-        GradientDrawable dotBg = new GradientDrawable();
-        dotBg.setShape(GradientDrawable.OVAL);
-        dotBg.setColor(ACCENT_BLUE);
-        dot.setBackground(dotBg);
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(16f);
+            iconView.setTypeface(iconFont);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
+            iconParams.setMargins(0, 0, dp(8), 0);
+            iconView.setLayoutParams(iconParams);
+            iconView.setGravity(Gravity.CENTER);
+            header.addView(iconView);
+        }
 
         TextView label = new TextView(getContext);
         label.setText(featName);
         label.setTextColor(TEXT_PRIMARY);
         label.setTextSize(14f);
+        label.setTypeface(menuFont);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
+
+        final int sliderColor = (icon != null) ? iconColor : ACCENT_BLUE;
 
         final TextView value = new TextView(getContext);
         value.setText(String.valueOf(current));
-        value.setTextColor(ACCENT_BLUE);
+        value.setTextColor(sliderColor);
         value.setTextSize(14f);
-        value.setTypeface(Typeface.DEFAULT_BOLD);
+        value.setTypeface(menuFont, Typeface.BOLD);
 
-        header.addView(dot);
         header.addView(label);
         header.addView(value);
 
@@ -738,7 +971,7 @@ public class Menu {
         progressTrack.setLayoutParams(progParams);
         GradientDrawable progBg = new GradientDrawable();
         progBg.setCornerRadius(dp(3));
-        progBg.setColor(ACCENT_BLUE);
+        progBg.setColor(sliderColor);
         progressTrack.setBackground(progBg);
 
         final android.widget.SeekBar seekBar = new android.widget.SeekBar(getContext);
@@ -755,7 +988,7 @@ public class Menu {
         thumbD.setShape(GradientDrawable.OVAL);
         thumbD.setSize(dp(20), dp(20));
         thumbD.setColor(TEXT_PRIMARY);
-        thumbD.setStroke(dp(3), ACCENT_BLUE);
+        thumbD.setStroke(dp(3), sliderColor);
         seekBar.setThumb(thumbD);
         seekBar.setThumbOffset(0);
 
@@ -774,12 +1007,10 @@ public class Menu {
 				}
 
 				@Override
-				public void onStartTrackingTouch(android.widget.SeekBar sb) {
-				}
+				public void onStartTrackingTouch(android.widget.SeekBar sb) {}
 
 				@Override
-				public void onStopTrackingTouch(android.widget.SeekBar sb) {
-				}
+				public void onStopTrackingTouch(android.widget.SeekBar sb) {}
 			});
 
         sliderFrame.post(new Runnable() {
@@ -803,37 +1034,55 @@ public class Menu {
         parent.addView(card);
     }
 
-    //================== BUTTON ==================//
+	//================== BUTTON ==================//
 
-    private void Button(LinearLayout parent, final int featNum, final String featName) {
-        TextView btn = new TextView(getContext);
+    private void Button(LinearLayout parent, final int featNum, final String featName, String icon, int iconColor) {
+        LinearLayout btn = new LinearLayout(getContext);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(48));
         params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
         btn.setLayoutParams(params);
-        btn.setText(Html.fromHtml(featName));
-        btn.setTextColor(BG_PRIMARY);
-        btn.setTextSize(14f);
-        btn.setTypeface(Typeface.DEFAULT_BOLD);
         btn.setGravity(Gravity.CENTER);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
+
+        // Renk: ikon varsa iconColor, yoksa ACCENT_PINK
+        int bgColor = (icon != null) ? iconColor : ACCENT_PINK;
 
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_L));
-        bg.setColor(ACCENT_PINK);
+        bg.setColor(bgColor);
         btn.setBackground(bg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             btn.setElevation(dp(2));
         }
 
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(BG_PRIMARY);
+            iconView.setTextSize(16f);
+            iconView.setTypeface(iconFont);
+            iconView.setPadding(0, 0, dp(8), 0);
+            btn.addView(iconView);
+        }
+
+        TextView text = new TextView(getContext);
+        text.setText(Html.fromHtml(featName));
+        text.setTextColor(BG_PRIMARY);
+        text.setTextSize(14f);
+        text.setTypeface(menuFont, Typeface.BOLD);
+        btn.addView(text);
+
         btn.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(final View v) {
 					v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
-                        .withEndAction(new Runnable() {
-                            @Override
-                            public void run() {
-                                v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
-                            }
-                        }).start();
+						.withEndAction(new Runnable() {
+							@Override
+							public void run() {
+								v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+							}
+						}).start();
 
 					if (featNum == -6) {
 						scrollView.removeAllViews();
@@ -848,68 +1097,156 @@ public class Menu {
         parent.addView(btn);
     }
 
-    //================== BUTTON ON/OFF ==================//
+	//================== BUTTON ON/OFF ==================//
 
-    private void ButtonOnOff(LinearLayout parent, final int featNum, String featName, boolean defaultOn) {
+    private void ButtonOnOff(LinearLayout parent, final int featNum, String featName, boolean defaultOn, final String icon) {
         final String name = featName.replace("OnOff_", "");
         final boolean[] isOn = {Preferences.loadPrefBool(featName, featNum, defaultOn)};
 
-        final TextView btn = new TextView(getContext);
+        final LinearLayout btn = new LinearLayout(getContext);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(48));
         params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
         btn.setLayoutParams(params);
-        btn.setTextColor(TEXT_PRIMARY);
-        btn.setTextSize(14f);
-        btn.setTypeface(Typeface.DEFAULT_BOLD);
         btn.setGravity(Gravity.CENTER);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             btn.setElevation(dp(2));
         }
 
-        applyOnOffStyle(btn, name, isOn[0]);
+        // İkon - sadece null değilse ekle
+        final TextView iconView;
+        if (icon != null) {
+            iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextSize(16f);
+            iconView.setTypeface(iconFont);
+            iconView.setPadding(0, 0, dp(8), 0);
+            btn.addView(iconView);
+        } else {
+            iconView = null;
+        }
+
+        final TextView text = new TextView(getContext);
+        text.setTextSize(14f);
+        text.setTypeface(menuFont, Typeface.BOLD);
+        btn.addView(text);
+
+        applyOnOffStyle(btn, iconView, text, name, isOn[0]);
 
         btn.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(final View v) {
 					isOn[0] = !isOn[0];
-					applyOnOffStyle(btn, name, isOn[0]);
+					applyOnOffStyle(btn, iconView, text, name, isOn[0]);
 					Preferences.changeFeatureBool(name, featNum, isOn[0]);
 
 					v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
-                        .withEndAction(new Runnable() {
-                            @Override
-                            public void run() {
-                                v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
-                            }
-                        }).start();
+						.withEndAction(new Runnable() {
+							@Override
+							public void run() {
+								v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+							}
+						}).start();
 				}
 			});
 
         parent.addView(btn);
     }
 
-    private void applyOnOffStyle(TextView btn, String name, boolean on) {
-        btn.setText(name + (on ? "  :  ON" : "  :  OFF"));
+    private void applyOnOffStyle(LinearLayout btn, TextView iconView, TextView text, String name, boolean on) {
+        text.setText(name + (on ? "  :  ON" : "  :  OFF"));
+        text.setTextColor(TEXT_PRIMARY);
+
+        if (iconView != null) {
+            iconView.setTextColor(on ? STATE_ON : STATE_OFF);
+        }
 
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_L));
         bg.setColor(on ? STATE_ON : STATE_OFF);
         btn.setBackground(bg);
     }
+	
+	//================== BUTTON LINK ==================//
 
-    //================== SPINNER ==================//
+    private void ButtonLink(LinearLayout parent, final String name, final String url, String icon, int accentColor) {
+        LinearLayout btn = new LinearLayout(getContext);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
+        params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
+        btn.setLayoutParams(params);
+        btn.setGravity(Gravity.CENTER);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
 
-    private void Spinner(LinearLayout parent, final int featNum, final String featName, final String list) {
+        int linkColor = (icon != null) ? accentColor : ACCENT_BLUE;
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(RADIUS_L));
+        bg.setStroke(dp(1), linkColor);
+        btn.setBackground(bg);
+
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(linkColor);
+            iconView.setTextSize(14f);
+            iconView.setTypeface(iconFont);
+            iconView.setPadding(0, 0, dp(8), 0);
+            btn.addView(iconView);
+        }
+
+        TextView text = new TextView(getContext);
+        text.setText(Html.fromHtml(name));
+        text.setTextColor(linkColor);
+        text.setTextSize(14f);
+        text.setTypeface(menuFont);
+        btn.addView(text);
+
+        btn.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					Intent i = new Intent(Intent.ACTION_VIEW);
+					i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+					i.setData(Uri.parse(url));
+					getContext.startActivity(i);
+				}
+			});
+
+        parent.addView(btn);
+    }
+
+	//================== SPINNER ==================//
+
+    private void Spinner(LinearLayout parent, final int featNum, final String featName, final String list, String icon, int iconColor) {
         final List<String> items = new LinkedList<>(Arrays.asList(list.split(",")));
         int sel = Preferences.loadPrefInt(featName, featNum);
         if (sel >= items.size()) sel = 0;
 
         LinearLayout card = makeCard(true);
 
+        LinearLayout header = new LinearLayout(getContext);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(16f);
+            iconView.setTypeface(iconFont);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
+            iconParams.setMargins(0, 0, dp(8), 0);
+            iconView.setLayoutParams(iconParams);
+            iconView.setGravity(Gravity.CENTER);
+            header.addView(iconView);
+        }
+
         TextView label = new TextView(getContext);
         label.setText(featName);
         label.setTextColor(TEXT_PRIMARY);
         label.setTextSize(14f);
+        label.setTypeface(menuFont);
+        header.addView(label);
 
         final TextView dropdown = new TextView(getContext);
         LinearLayout.LayoutParams ddParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
@@ -918,6 +1255,7 @@ public class Menu {
         dropdown.setText(items.get(sel));
         dropdown.setTextColor(TEXT_PRIMARY);
         dropdown.setTextSize(14f);
+        dropdown.setTypeface(menuFont);
         dropdown.setGravity(Gravity.CENTER_VERTICAL);
         dropdown.setPadding(dp(14), 0, dp(14), 0);
 
@@ -935,16 +1273,18 @@ public class Menu {
 				}
 			});
 
-        card.addView(label);
+        card.addView(header);
         card.addView(dropdown);
         parent.addView(card);
     }
 
-    //================== INPUT NUMBER ==================//
+	//================== INPUT NUMBER ==================//
 
-    private void InputNum(LinearLayout parent, final int featNum, final String featName, final int maxVal) {
+    private void InputNum(LinearLayout parent, final int featNum, final String featName, final int maxVal, final String icon, final int iconColor) {
         int num = Preferences.loadPrefInt(featName, featNum);
-        final TextView btn = makeInputBtn(featName, String.valueOf(num));
+
+        final LinearLayout btn = createInputButton(featName, String.valueOf(num), icon, iconColor);
+        final boolean hasIcon = (icon != null);
 
         btn.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -952,7 +1292,7 @@ public class Menu {
 					showNumberDialog(featName, featNum, maxVal, false, new OnInputResult() {
 							@Override
 							public void onResult(String val) {
-								btn.setText(Html.fromHtml(featName + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
+								updateInputButtonText(btn, featName, val, hasIcon);
 							}
 						});
 				}
@@ -961,9 +1301,13 @@ public class Menu {
         parent.addView(btn);
     }
 
-    private void InputLNum(LinearLayout parent, final int featNum, final String featName, final long maxVal) {
+    //================== INPUT LONG NUMBER ==================//
+
+    private void InputLNum(LinearLayout parent, final int featNum, final String featName, final long maxVal, final String icon, final int iconColor) {
         long num = Preferences.loadPrefLong(featName, featNum);
-        final TextView btn = makeInputBtn(featName, String.valueOf(num));
+
+        final LinearLayout btn = createInputButton(featName, String.valueOf(num), icon, iconColor);
+        final boolean hasIcon = (icon != null);
 
         btn.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -971,7 +1315,7 @@ public class Menu {
 					showNumberDialog(featName, featNum, maxVal, true, new OnInputResult() {
 							@Override
 							public void onResult(String val) {
-								btn.setText(Html.fromHtml(featName + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
+								updateInputButtonText(btn, featName, val, hasIcon);
 							}
 						});
 				}
@@ -980,9 +1324,14 @@ public class Menu {
         parent.addView(btn);
     }
 
-    private void InputText(LinearLayout parent, final int featNum, final String featName) {
+    //================== INPUT TEXT ==================//
+
+    private void InputText(LinearLayout parent, final int featNum, final String featName, final String icon, final int iconColor) {
         String txt = Preferences.loadPrefString(featName, featNum);
-        final TextView btn = makeInputBtn(featName, txt);
+        if (txt == null) txt = "";
+
+        final LinearLayout btn = createInputButton(featName, txt, icon, iconColor);
+        final boolean hasIcon = (icon != null);
 
         btn.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -990,7 +1339,7 @@ public class Menu {
 					showTextDialog(featName, featNum, new OnInputResult() {
 							@Override
 							public void onResult(String val) {
-								btn.setText(Html.fromHtml(featName + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
+								updateInputButtonText(btn, featName, val, hasIcon);
 							}
 						});
 				}
@@ -999,15 +1348,15 @@ public class Menu {
         parent.addView(btn);
     }
 
-    private TextView makeInputBtn(String name, String val) {
-        TextView btn = new TextView(getContext);
+    //================== INPUT BUTTON HELPERS ==================//
+
+    private LinearLayout createInputButton(String name, String val, String icon, int iconColor) {
+        LinearLayout btn = new LinearLayout(getContext);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(48));
         params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
         btn.setLayoutParams(params);
-        btn.setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
-        btn.setTextColor(TEXT_PRIMARY);
-        btn.setTextSize(14f);
         btn.setGravity(Gravity.CENTER_VERTICAL);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
         btn.setPadding(dp(14), 0, dp(14), 0);
 
         GradientDrawable bg = new GradientDrawable();
@@ -1016,13 +1365,65 @@ public class Menu {
         bg.setStroke(dp(1), BORDER_SOFT);
         btn.setBackground(bg);
 
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(16f);
+            iconView.setTypeface(iconFont);
+            iconView.setPadding(0, 0, dp(10), 0);
+            btn.addView(iconView);
+        }
+
+        // Text view
+        TextView textView = new TextView(getContext);
+        textView.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
+        if (val == null || val.isEmpty()) {
+            textView.setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>-</b></font>"));
+        } else {
+            textView.setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
+        }
+        textView.setTextColor(TEXT_PRIMARY);
+        textView.setTextSize(14f);
+        textView.setTypeface(menuFont);
+        btn.addView(textView);
+
         return btn;
     }
 
-    //================== CHECKBOX ==================//
+    private void updateInputButtonText(LinearLayout btn, String name, String val, boolean hasIcon) {
+        int textIndex = hasIcon ? 1 : 0;
+        if (btn.getChildCount() > textIndex) {
+            View child = btn.getChildAt(textIndex);
+            if (child instanceof TextView) {
+                if (val == null || val.isEmpty()) {
+                    ((TextView) child).setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>-</b></font>"));
+                } else {
+                    ((TextView) child).setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
+                }
+            }
+        }
+    }
 
-    private void CheckBox(LinearLayout parent, final int featNum, final String featName, boolean defaultOn) {
+	//================== CHECKBOX ==================//
+
+    private void CheckBox(LinearLayout parent, final int featNum, final String featName, boolean defaultOn, String icon, final int iconColor) {
         LinearLayout card = makeCard(false);
+
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(16f);
+            iconView.setTypeface(iconFont);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
+            iconParams.setMargins(0, 0, dp(8), 0);
+            iconView.setLayoutParams(iconParams);
+            iconView.setGravity(Gravity.CENTER);
+            card.addView(iconView);
+        }
 
         final View checkBox = new View(getContext);
         LinearLayout.LayoutParams cbParams = new LinearLayout.LayoutParams(dp(22), dp(22));
@@ -1033,25 +1434,27 @@ public class Menu {
         label.setText(featName);
         label.setTextColor(TEXT_PRIMARY);
         label.setTextSize(14f);
+        label.setTypeface(menuFont);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
 
         final boolean[] checked = {Preferences.loadPrefBool(featName, featNum, defaultOn)};
-        applyCheckStyle(checkBox, checked[0]);
+        final int checkColor = (icon != null) ? iconColor : ACCENT_PURPLE;
+        applyCheckStyle(checkBox, checked[0], checkColor);
 
         card.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
 					checked[0] = !checked[0];
-					applyCheckStyle(checkBox, checked[0]);
+					applyCheckStyle(checkBox, checked[0], checkColor);
 					Preferences.changeFeatureBool(featName, featNum, checked[0]);
 
 					checkBox.animate().scaleX(0.8f).scaleY(0.8f).setDuration(100)
-                        .withEndAction(new Runnable() {
-                            @Override
-                            public void run() {
-                                checkBox.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
-                            }
-                        }).start();
+						.withEndAction(new Runnable() {
+							@Override
+							public void run() {
+								checkBox.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
+							}
+						}).start();
 				}
 			});
 
@@ -1060,12 +1463,12 @@ public class Menu {
         parent.addView(card);
     }
 
-    private void applyCheckStyle(View box, boolean checked) {
+    private void applyCheckStyle(View box, boolean checked, int accentColor) {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(6));
 
         if (checked) {
-            bg.setColor(ACCENT_PURPLE);
+            bg.setColor(accentColor);
         } else {
             bg.setColor(Color.TRANSPARENT);
             bg.setStroke(dp(2), TEXT_MUTED);
@@ -1074,17 +1477,36 @@ public class Menu {
         box.setBackground(bg);
     }
 
-    //================== RADIO BUTTON ==================//
+	//================== RADIO BUTTON ==================//
 
-    private void RadioButton(LinearLayout parent, final int featNum, String featName, final String list) {
+    private void RadioButton(LinearLayout parent, final int featNum, String featName, final String list, String icon, final int iconColor) {
         final List<String> items = new LinkedList<>(Arrays.asList(list.split(",")));
 
         LinearLayout card = makeCard(true);
+
+        LinearLayout header = new LinearLayout(getContext);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(16f);
+            iconView.setTypeface(iconFont);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
+            iconParams.setMargins(0, 0, dp(8), 0);
+            iconView.setLayoutParams(iconParams);
+            iconView.setGravity(Gravity.CENTER);
+            header.addView(iconView);
+        }
 
         final TextView label = new TextView(getContext);
         label.setText(featName + ":");
         label.setTextColor(TEXT_PRIMARY);
         label.setTextSize(14f);
+        label.setTypeface(menuFont);
+        header.addView(label);
 
         LinearLayout radioGroup = new LinearLayout(getContext);
         radioGroup.setOrientation(LinearLayout.VERTICAL);
@@ -1094,6 +1516,7 @@ public class Menu {
 
         final int[] selected = {Preferences.loadPrefInt(featName, featNum)};
         final View[] radios = new View[items.size()];
+        final int radioColor = (icon != null) ? iconColor : ACCENT_PINK;
 
         for (int i = 0; i < items.size(); i++) {
             final int idx = i;
@@ -1108,12 +1531,13 @@ public class Menu {
             rParams.setMargins(0, 0, dp(12), 0);
             radio.setLayoutParams(rParams);
             radios[i] = radio;
-            applyRadioStyle(radio, selected[0] == i + 1);
+            applyRadioStyle(radio, selected[0] == i + 1, radioColor);
 
             TextView itemLabel = new TextView(getContext);
             itemLabel.setText(item);
             itemLabel.setTextColor(TEXT_SECONDARY);
             itemLabel.setTextSize(13f);
+            itemLabel.setTypeface(menuFont);
 
             final String fName = featName;
             row.setOnClickListener(new View.OnClickListener() {
@@ -1121,7 +1545,7 @@ public class Menu {
 					public void onClick(View v) {
 						selected[0] = idx + 1;
 						for (int j = 0; j < radios.length; j++) {
-							applyRadioStyle(radios[j], j == idx);
+							applyRadioStyle(radios[j], j == idx, radioColor);
 						}
 						label.setText(Html.fromHtml(fName + ": <font color='#D4A5C9'>" + item + "</font>"));
 						Preferences.changeFeatureInt(fName, featNum, selected[0]);
@@ -1137,18 +1561,18 @@ public class Menu {
             label.setText(Html.fromHtml(featName + ": <font color='#D4A5C9'>" + items.get(selected[0] - 1) + "</font>"));
         }
 
-        card.addView(label);
+        card.addView(header);
         card.addView(radioGroup);
         parent.addView(card);
     }
 
-    private void applyRadioStyle(View radio, boolean selected) {
+    private void applyRadioStyle(View radio, boolean selected, int accentColor) {
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
 
         if (selected) {
-            bg.setColor(ACCENT_PINK);
-            bg.setStroke(dp(2), ACCENT_PINK);
+            bg.setColor(accentColor);
+            bg.setStroke(dp(2), accentColor);
         } else {
             bg.setColor(Color.TRANSPARENT);
             bg.setStroke(dp(2), TEXT_MUTED);
@@ -1157,9 +1581,9 @@ public class Menu {
         radio.setBackground(bg);
     }
 
-    //================== COLLAPSE ==================//
+	//================== COLLAPSE ==================//
 
-    private void Collapse(LinearLayout parent, final String text, final boolean expanded) {
+    private void Collapse(LinearLayout parent, final String text, final boolean expanded, String icon, int bgColor) {
         final LinearLayout header = new LinearLayout(getContext);
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams hParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(46));
@@ -1167,25 +1591,27 @@ public class Menu {
         header.setLayoutParams(hParams);
         header.setPadding(dp(14), 0, dp(14), 0);
 
+        int headerColor = (icon != null) ? bgColor : ACCENT_PEACH;
+
         GradientDrawable hBg = new GradientDrawable();
         hBg.setCornerRadius(dp(RADIUS_L));
-        hBg.setColor(ACCENT_PEACH);
+        hBg.setColor(headerColor);
         header.setBackground(hBg);
 
+        // Ok ikonu
         final TextView arrow = new TextView(getContext);
-        arrow.setText(expanded ? "▽" : "▷");
+        arrow.setText(expanded ? ICON_ARROW_DOWN : ICON_ARROW_RIGHT);
         arrow.setTextColor(BG_PRIMARY);
-        arrow.setTextSize(14f);
-        arrow.setTypeface(Typeface.DEFAULT_BOLD);
+        arrow.setTextSize(18f);
+        arrow.setTypeface(iconFont);
+        header.addView(arrow);
 
         TextView title = new TextView(getContext);
         title.setText(text);
         title.setTextColor(BG_PRIMARY);
         title.setTextSize(14f);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setPadding(dp(10), 0, 0, 0);
-
-        header.addView(arrow);
+        title.setTypeface(menuFont, Typeface.BOLD);
+        title.setPadding(dp(8), 0, 0, 0);
         header.addView(title);
 
         final LinearLayout content = new LinearLayout(getContext);
@@ -1208,7 +1634,7 @@ public class Menu {
 				@Override
 				public void onClick(View v) {
 					isOpen[0] = !isOpen[0];
-					arrow.setText(isOpen[0] ? "▽" : "▷");
+					arrow.setText(isOpen[0] ? ICON_ARROW_DOWN : ICON_ARROW_RIGHT);
 
 					if (isOpen[0]) {
 						content.setVisibility(View.VISIBLE);
@@ -1216,13 +1642,13 @@ public class Menu {
 						content.animate().alpha(1f).setDuration(200).start();
 					} else {
 						content.animate().alpha(0f).setDuration(150)
-                            .withEndAction(new Runnable() {
-                                @Override
-                                public void run() {
-                                    content.setVisibility(View.GONE);
-                                    content.setAlpha(1f);
-                                }
-                            }).start();
+							.withEndAction(new Runnable() {
+								@Override
+								public void run() {
+									content.setVisibility(View.GONE);
+									content.setAlpha(1f);
+								}
+							}).start();
 					}
 				}
 			});
@@ -1231,66 +1657,74 @@ public class Menu {
         parent.addView(content);
     }
 
-    //================== CATEGORY & TEXT ==================//
+	//================== CATEGORY & TEXT ==================//
 
-    private void Category(LinearLayout parent, String text) {
-        TextView cat = new TextView(getContext);
+    private void Category(LinearLayout parent, String text, String icon, int iconColor) {
+        LinearLayout container = new LinearLayout(getContext);
+        container.setOrientation(LinearLayout.HORIZONTAL);
+        container.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
         params.setMargins(0, dp(14), 0, dp(6));
-        cat.setLayoutParams(params);
+        container.setLayoutParams(params);
+
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(12f);
+            iconView.setTypeface(iconFont);
+            iconView.setPadding(0, 0, dp(6), 0);
+            container.addView(iconView);
+        }
+
+        int catColor = (icon != null) ? iconColor : ACCENT_PURPLE;
+
+        TextView cat = new TextView(getContext);
         cat.setText(Html.fromHtml(text));
-        cat.setTextColor(ACCENT_PURPLE);
+        cat.setTextColor(catColor);
         cat.setTextSize(11f);
-        cat.setTypeface(Typeface.DEFAULT_BOLD);
+        cat.setTypeface(menuFont, Typeface.BOLD);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             cat.setLetterSpacing(0.08f);
         }
+        container.addView(cat);
 
-        parent.addView(cat);
+        parent.addView(container);
     }
 
-    private void TextView(LinearLayout parent, String text) {
-        TextView tv = new TextView(getContext);
+    private void TextView(LinearLayout parent, String text, String icon, int iconColor) {
+        LinearLayout container = new LinearLayout(getContext);
+        container.setOrientation(LinearLayout.HORIZONTAL);
+        container.setGravity(Gravity.TOP);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
         params.setMargins(0, dp(4), 0, dp(4));
-        tv.setLayoutParams(params);
+        container.setLayoutParams(params);
+
+        // İkon - sadece null değilse ekle
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(iconColor);
+            iconView.setTextSize(14f);
+            iconView.setTypeface(iconFont);
+            iconView.setPadding(0, dp(2), dp(8), 0);
+            container.addView(iconView);
+        }
+
+        TextView tv = new TextView(getContext);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
         tv.setText(Html.fromHtml(text));
         tv.setTextColor(TEXT_SECONDARY);
         tv.setTextSize(13f);
+        tv.setTypeface(menuFont);
         tv.setLineSpacing(0, 1.2f);
+        container.addView(tv);
 
-        parent.addView(tv);
+        parent.addView(container);
     }
 
-    private void ButtonLink(LinearLayout parent, final String name, final String url) {
-        TextView btn = new TextView(getContext);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
-        params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
-        btn.setLayoutParams(params);
-        btn.setText(Html.fromHtml(name));
-        btn.setTextColor(ACCENT_BLUE);
-        btn.setTextSize(14f);
-        btn.setGravity(Gravity.CENTER);
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(RADIUS_L));
-        bg.setStroke(dp(1), ACCENT_BLUE);
-        btn.setBackground(bg);
-
-        btn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					Intent i = new Intent(Intent.ACTION_VIEW);
-					i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-					i.setData(Uri.parse(url));
-					getContext.startActivity(i);
-				}
-			});
-
-        parent.addView(btn);
-    }
-
-    //================== DIALOGS ==================//
+	//================== DIALOGS ==================//
 
     interface OnInputResult {
         void onResult(String value);
@@ -1308,8 +1742,13 @@ public class Menu {
         input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
         input.setTextColor(TEXT_PRIMARY);
         input.setHintTextColor(TEXT_MUTED);
-        if (maxVal > 0) input.setHint("Max: " + maxVal);
+        if (maxVal > 0) {
+            input.setHint("Max: " + maxVal);
+        } else {
+            input.setHint("Enter number...");
+        }
         input.setTextSize(16f);
+        input.setTypeface(menuFont);
         input.setGravity(Gravity.CENTER);
         input.setPadding(dp(14), dp(12), dp(14), dp(12));
 
@@ -1318,33 +1757,43 @@ public class Menu {
         iBg.setColor(BG_INPUT);
         input.setBackground(iBg);
 
-        LinearLayout btns = createDialogButtons(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					removeDialogOverlay(overlay);
-				}
-			}, new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					String txt = input.getText().toString();
-					long val = 0;
-					try {
-						val = txt.isEmpty() ? 0 : Long.parseLong(txt);
-						if (maxVal > 0 && val > maxVal) val = maxVal;
-					} catch (Exception e) {
-						val = maxVal > 0 ? maxVal : (isLong ? Long.MAX_VALUE : Integer.MAX_VALUE);
-					}
+        LinearLayout btns = createDialogButtons(
+            new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    removeDialogOverlay(overlay);
+                }
+            },
+            new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    String txt = input.getText().toString().trim();
+                    long val = 0;
+                    try {
+                        if (!txt.isEmpty()) {
+                            val = Long.parseLong(txt);
+                        }
+                        if (maxVal > 0 && val > maxVal) {
+                            val = maxVal;
+                        }
+                    } catch (NumberFormatException e) {
+                        val = maxVal > 0 ? maxVal : (isLong ? Long.MAX_VALUE : Integer.MAX_VALUE);
+                    }
 
-					if (isLong) {
-						Preferences.changeFeatureLong(title, featNum, val);
-					} else {
-						Preferences.changeFeatureInt(title, featNum, (int) val);
-					}
+                    if (isLong) {
+                        Preferences.changeFeatureLong(title, featNum, val);
+                    } else {
+                        Preferences.changeFeatureInt(title, featNum, (int) val);
+                    }
 
-					callback.onResult(String.valueOf(val));
-					removeDialogOverlay(overlay);
-				}
-			}, ACCENT_PINK);
+                    if (callback != null) {
+                        callback.onResult(String.valueOf(val));
+                    }
+                    removeDialogOverlay(overlay);
+                }
+            },
+            ACCENT_PINK
+        );
 
         dialog.addView(input);
         dialog.addView(btns);
@@ -1360,32 +1809,46 @@ public class Menu {
         LinearLayout.LayoutParams iParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(50));
         iParams.setMargins(0, dp(16), 0, dp(16));
         input.setLayoutParams(iParams);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
         input.setTextColor(TEXT_PRIMARY);
         input.setHintTextColor(TEXT_MUTED);
         input.setHint("Enter text...");
         input.setTextSize(16f);
+        input.setTypeface(menuFont);
         input.setGravity(Gravity.CENTER);
         input.setPadding(dp(14), dp(12), dp(14), dp(12));
+
+        // Mevcut değeri yükle
+        String currentVal = Preferences.loadPrefString(title, featNum);
+        if (currentVal != null && !currentVal.isEmpty()) {
+            input.setText(currentVal);
+        }
 
         GradientDrawable iBg = new GradientDrawable();
         iBg.setCornerRadius(dp(RADIUS_M));
         iBg.setColor(BG_INPUT);
         input.setBackground(iBg);
 
-        LinearLayout btns = createDialogButtons(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					removeDialogOverlay(overlay);
-				}
-			}, new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					String txt = input.getText().toString();
-					Preferences.changeFeatureString(title, featNum, txt);
-					callback.onResult(txt);
-					removeDialogOverlay(overlay);
-				}
-			}, ACCENT_BLUE);
+        LinearLayout btns = createDialogButtons(
+            new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    removeDialogOverlay(overlay);
+                }
+            },
+            new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    String txt = input.getText().toString();
+                    Preferences.changeFeatureString(title, featNum, txt);
+                    if (callback != null) {
+                        callback.onResult(txt);
+                    }
+                    removeDialogOverlay(overlay);
+                }
+            },
+            ACCENT_BLUE
+        );
 
         dialog.addView(input);
         dialog.addView(btns);
@@ -1399,42 +1862,67 @@ public class Menu {
         LinearLayout dialog = createDialogBox(title, ACCENT_PURPLE);
 
         ScrollView sv = new ScrollView(getContext);
-        sv.setLayoutParams(new LinearLayout.LayoutParams(MATCH_PARENT, dp(180)));
+        LinearLayout.LayoutParams svParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(200));
+        svParams.setMargins(0, dp(12), 0, 0);
+        sv.setLayoutParams(svParams);
+        sv.setVerticalScrollBarEnabled(true);
 
         LinearLayout list = new LinearLayout(getContext);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(0, dp(8), 0, dp(8));
+        list.setPadding(0, dp(4), 0, dp(4));
 
         for (int i = 0; i < items.size(); i++) {
             final int idx = i;
             final String item = items.get(i);
 
+            LinearLayout itemContainer = new LinearLayout(getContext);
+            itemContainer.setOrientation(LinearLayout.HORIZONTAL);
+            itemContainer.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams icParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
+            icParams.setMargins(0, dp(2), 0, dp(2));
+            itemContainer.setLayoutParams(icParams);
+            itemContainer.setPadding(dp(14), 0, dp(14), 0);
+
+            boolean isSelected = (selected[0] == i);
+
+            GradientDrawable icBg = new GradientDrawable();
+            icBg.setCornerRadius(dp(RADIUS_M));
+            icBg.setColor(isSelected ? Color.parseColor("#33A99FD3") : BG_CARD_LIGHT);
+            itemContainer.setBackground(icBg);
+
+            // Check icon
+            TextView checkIcon = new TextView(getContext);
+            checkIcon.setText(ICON_CHECK);
+            checkIcon.setTextColor(ACCENT_PURPLE);
+            checkIcon.setTextSize(14f);
+            checkIcon.setTypeface(iconFont);
+            checkIcon.setVisibility(isSelected ? View.VISIBLE : View.INVISIBLE);
+            LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(dp(24), dp(24));
+            checkParams.setMargins(0, 0, dp(8), 0);
+            checkIcon.setLayoutParams(checkParams);
+            checkIcon.setGravity(Gravity.CENTER);
+            itemContainer.addView(checkIcon);
+
+            // Item text
             TextView itemView = new TextView(getContext);
-            LinearLayout.LayoutParams ivParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
-            ivParams.setMargins(0, dp(3), 0, dp(3));
-            itemView.setLayoutParams(ivParams);
             itemView.setText(item);
-            itemView.setTextColor(selected[0] == i ? ACCENT_PURPLE : TEXT_PRIMARY);
+            itemView.setTextColor(isSelected ? ACCENT_PURPLE : TEXT_PRIMARY);
             itemView.setTextSize(14f);
-            itemView.setGravity(Gravity.CENTER_VERTICAL);
-            itemView.setPadding(dp(14), 0, dp(14), 0);
+            itemView.setTypeface(menuFont);
+            itemView.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
+            itemContainer.addView(itemView);
 
-            GradientDrawable ivBg = new GradientDrawable();
-            ivBg.setCornerRadius(dp(RADIUS_M));
-            ivBg.setColor(selected[0] == i ? Color.parseColor("#33A99FD3") : BG_CARD_LIGHT);
-            itemView.setBackground(ivBg);
-
-            itemView.setOnClickListener(new View.OnClickListener() {
+            itemContainer.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
 						selected[0] = idx;
 						dropdown.setText(item);
-						Preferences.changeFeatureInt(item, featNum, idx);
+						Preferences.changeFeatureInt(title, featNum, idx);
 						removeDialogOverlay(overlay);
 					}
 				});
 
-            list.addView(itemView);
+            list.addView(itemContainer);
         }
 
         sv.addView(list);
@@ -1442,6 +1930,7 @@ public class Menu {
 
         showDialogOverlay(overlay, dialog);
 
+        // Overlay'e tıklanınca kapat
         overlay.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
@@ -1450,10 +1939,13 @@ public class Menu {
 			});
     }
 
+    //================== DIALOG HELPERS ==================//
+
     private FrameLayout createDialogOverlay() {
         FrameLayout overlay = new FrameLayout(getContext);
         overlay.setLayoutParams(new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
         overlay.setBackgroundColor(Color.parseColor("#CC000000"));
+        overlay.setClickable(true);
         return overlay;
     }
 
@@ -1464,6 +1956,7 @@ public class Menu {
         params.gravity = Gravity.CENTER;
         box.setLayoutParams(params);
         box.setPadding(dp(20), dp(20), dp(20), dp(20));
+        box.setClickable(true); // Tıklamayı engelle, overlay'e geçmesin
 
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_XL));
@@ -1474,13 +1967,13 @@ public class Menu {
             box.setElevation(dp(20));
         }
 
+        // Title
         TextView titleView = new TextView(getContext);
         titleView.setText(title);
         titleView.setTextColor(accentColor);
         titleView.setTextSize(16f);
-        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTypeface(menuFont, Typeface.BOLD);
         titleView.setGravity(Gravity.CENTER);
-
         box.addView(titleView);
 
         return box;
@@ -1489,35 +1982,69 @@ public class Menu {
     private LinearLayout createDialogButtons(View.OnClickListener onCancel,
                                              View.OnClickListener onOk, int okColor) {
         LinearLayout btns = new LinearLayout(getContext);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
         btns.setGravity(Gravity.CENTER);
-        btns.setWeightSum(2);
+        LinearLayout.LayoutParams btnsParams = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
+        btnsParams.topMargin = dp(8);
+        btns.setLayoutParams(btnsParams);
 
         LinearLayout.LayoutParams bParams = new LinearLayout.LayoutParams(0, dp(42), 1);
-        bParams.setMargins(dp(5), 0, dp(5), 0);
+        bParams.setMargins(dp(4), 0, dp(4), 0);
 
-        TextView cancelBtn = new TextView(getContext);
+        // Cancel Button
+        LinearLayout cancelBtn = new LinearLayout(getContext);
         cancelBtn.setLayoutParams(bParams);
-        cancelBtn.setText("Cancel");
-        cancelBtn.setTextColor(TEXT_SECONDARY);
-        cancelBtn.setTextSize(14f);
         cancelBtn.setGravity(Gravity.CENTER);
+        cancelBtn.setOrientation(LinearLayout.HORIZONTAL);
+
         GradientDrawable cBg = new GradientDrawable();
         cBg.setCornerRadius(dp(RADIUS_M));
         cBg.setColor(BG_CARD);
         cancelBtn.setBackground(cBg);
+
+        TextView cancelIcon = new TextView(getContext);
+        cancelIcon.setText(ICON_CLOSE);
+        cancelIcon.setTextColor(TEXT_SECONDARY);
+        cancelIcon.setTextSize(14f);
+        cancelIcon.setTypeface(iconFont);
+        cancelIcon.setPadding(0, 0, dp(6), 0);
+        cancelBtn.addView(cancelIcon);
+
+        TextView cancelText = new TextView(getContext);
+        cancelText.setText("Cancel");
+        cancelText.setTextColor(TEXT_SECONDARY);
+        cancelText.setTextSize(13f);
+        cancelText.setTypeface(menuFont);
+        cancelBtn.addView(cancelText);
+
         cancelBtn.setOnClickListener(onCancel);
 
-        TextView okBtn = new TextView(getContext);
+        // OK Button
+        LinearLayout okBtn = new LinearLayout(getContext);
         okBtn.setLayoutParams(bParams);
-        okBtn.setText("OK");
-        okBtn.setTextColor(BG_PRIMARY);
-        okBtn.setTextSize(14f);
-        okBtn.setTypeface(Typeface.DEFAULT_BOLD);
         okBtn.setGravity(Gravity.CENTER);
+        okBtn.setOrientation(LinearLayout.HORIZONTAL);
+
         GradientDrawable oBg = new GradientDrawable();
         oBg.setCornerRadius(dp(RADIUS_M));
         oBg.setColor(okColor);
         okBtn.setBackground(oBg);
+
+        TextView okIcon = new TextView(getContext);
+        okIcon.setText(ICON_CHECK);
+        okIcon.setTextColor(BG_PRIMARY);
+        okIcon.setTextSize(14f);
+        okIcon.setTypeface(iconFont);
+        okIcon.setPadding(0, 0, dp(6), 0);
+        okBtn.addView(okIcon);
+
+        TextView okText = new TextView(getContext);
+        okText.setText("OK");
+        okText.setTextColor(BG_PRIMARY);
+        okText.setTextSize(13f);
+        okText.setTypeface(menuFont, Typeface.BOLD);
+        okBtn.addView(okText);
+
         okBtn.setOnClickListener(onOk);
 
         btns.addView(cancelBtn);
@@ -1527,7 +2054,7 @@ public class Menu {
     }
 
     @SuppressLint("WrongConstant")
-    private void showDialogOverlay(final FrameLayout overlay, LinearLayout dialog) {
+    private void showDialogOverlay(final FrameLayout overlay, final LinearLayout dialog) {
         overlay.addView(dialog);
 
         overlay.setAlpha(0f);
@@ -1535,14 +2062,18 @@ public class Menu {
         dialog.setScaleY(0.85f);
 
         if (overlayRequired) {
-            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
-				WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
-				WindowManager.LayoutParams.TYPE_PHONE;
+            int type;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            } else {
+                type = WindowManager.LayoutParams.TYPE_PHONE;
+            }
 
             WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-				MATCH_PARENT, MATCH_PARENT, type,
-				WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-				PixelFormat.TRANSLUCENT
+                MATCH_PARENT, MATCH_PARENT, type,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                PixelFormat.TRANSLUCENT
             );
             mWindowManager.addView(overlay, params);
         } else {
@@ -1552,24 +2083,265 @@ public class Menu {
 
         overlay.animate().alpha(1f).setDuration(200).start();
         dialog.animate().scaleX(1f).scaleY(1f).setDuration(250)
-			.setInterpolator(new OvershootInterpolator(1.1f)).start();
+            .setInterpolator(new OvershootInterpolator(1.1f)).start();
     }
 
     private void removeDialogOverlay(final FrameLayout overlay) {
         overlay.animate().alpha(0f).setDuration(150)
-			.withEndAction(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						if (overlayRequired) {
-							mWindowManager.removeView(overlay);
-						} else {
-							((ViewGroup) overlay.getParent()).removeView(overlay);
-						}
-					} catch (Exception e) {
-					}
-				}
-			}).start();
+            .withEndAction(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (overlayRequired) {
+                            if (mWindowManager != null && overlay.isAttachedToWindow()) {
+                                mWindowManager.removeView(overlay);
+                            }
+                        } else {
+                            ViewGroup parent = (ViewGroup) overlay.getParent();
+                            if (parent != null) {
+                                parent.removeView(overlay);
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+    }
+
+	//================== ICON PARSING FROM C++ ==================//
+
+    /**
+     * C++ string'inden ikon key çıkarır
+     * Format: "Toggle_[EYE]Feature Name" → "EYE"
+     * Eğer ikon yoksa null döner
+     */
+    private String extractIconKey(String feature) {
+        if (feature.contains("[") && feature.contains("]")) {
+            int start = feature.indexOf("[");
+            int end = feature.indexOf("]");
+            if (start < end && start >= 0) {
+                return feature.substring(start + 1, end);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Feature name'den [ICON_KEY] kısmını çıkarır
+     */
+    private String removeIconFromName(String name) {
+        if (name.contains("[") && name.contains("]")) {
+            int start = name.indexOf("[");
+            int end = name.indexOf("]");
+            if (start < end && start >= 0) {
+                return name.substring(0, start) + name.substring(end + 1);
+            }
+        }
+        return name;
+    }
+
+    /**
+     * İkon key'ini gerçek Unicode karakterine çevirir
+     */
+    private String getIconFromKey(String key) {
+        if (key == null) return null;
+
+        switch (key) {
+				// Navigation & UI
+            case "SETTINGS": return ICON_SETTINGS;
+            case "BACK": return ICON_BACK;
+            case "MENU": return ICON_MENU;
+            case "CLOSE": return ICON_CLOSE;
+            case "CHECK": return ICON_CHECK;
+            case "ADD": return ICON_ADD;
+            case "ARROW_UP": return ICON_ARROW_UP;
+            case "ARROW_DOWN": return ICON_ARROW_DOWN;
+            case "ARROW_LEFT": return ICON_ARROW_LEFT;
+            case "ARROW_RIGHT": return ICON_ARROW_RIGHT;
+
+				// Toggle & Controls
+            case "TOGGLE": return ICON_TOGGLE;
+            case "CHECKBOX": return ICON_CHECKBOX;
+            case "RADIO": return ICON_RADIO;
+            case "SLIDER": return ICON_SLIDER;
+            case "INPUT": return ICON_INPUT;
+            case "DROPDOWN": return ICON_DROPDOWN;
+
+				// Game & Mod
+            case "EYE": return ICON_EYE;
+            case "EYE_OFF": return ICON_EYE_OFF;
+            case "SPEED": return ICON_SPEED;
+            case "GAMEPAD": return ICON_GAMEPAD;
+            case "TARGET": return ICON_TARGET;
+            case "CROSSHAIR": return ICON_CROSSHAIR;
+            case "SHIELD": return ICON_SHIELD;
+            case "SWORD": return ICON_SWORD;
+            case "MAGIC": return ICON_MAGIC;
+            case "FLASH": return ICON_FLASH;
+            case "FIRE": return ICON_FIRE;
+            case "GHOST": return ICON_GHOST;
+            case "SKULL": return ICON_SKULL;
+
+				// User & People
+            case "USER": return ICON_USER;
+            case "USERS": return ICON_USERS;
+            case "SPY": return ICON_SPY;
+
+				// Location & Map
+            case "MAP": return ICON_MAP;
+            case "LOCATION": return ICON_LOCATION;
+            case "COMPASS": return ICON_COMPASS;
+            case "RADAR": return ICON_RADAR;
+            case "NAVIGATION": return ICON_NAVIGATION;
+
+				// System & Debug
+            case "BUG": return ICON_BUG;
+            case "CODE": return ICON_CODE;
+            case "TERMINAL": return ICON_TERMINAL;
+            case "CPU": return ICON_CPU;
+            case "WIFI": return ICON_WIFI;
+            case "DATABASE": return ICON_DATABASE;
+
+				// Actions
+            case "ROCKET": return ICON_ROCKET;
+            case "PLAY": return ICON_PLAY;
+            case "PAUSE": return ICON_PAUSE;
+            case "STOP": return ICON_STOP;
+            case "REFRESH": return ICON_REFRESH;
+            case "SAVE": return ICON_SAVE;
+            case "DOWNLOAD": return ICON_DOWNLOAD;
+            case "UPLOAD": return ICON_UPLOAD;
+
+				// Status & Info
+            case "STAR": return ICON_STAR;
+            case "HEART": return ICON_HEART;
+            case "INFINITY": return ICON_INFINITY;
+            case "TIMER": return ICON_TIMER;
+            case "INFO": return ICON_INFO;
+            case "WARNING": return ICON_WARNING;
+            case "ERROR": return ICON_ERROR;
+            case "SUCCESS": return ICON_SUCCESS;
+
+				// Media & View
+            case "CAMERA": return ICON_CAMERA;
+            case "VIDEO": return ICON_VIDEO;
+            case "ZOOM_IN": return ICON_ZOOM_IN;
+            case "ZOOM_OUT": return ICON_ZOOM_OUT;
+            case "FULLSCREEN": return ICON_FULLSCREEN;
+            case "PICTURE": return ICON_PICTURE;
+
+				// Security
+            case "LOCK": return ICON_LOCK;
+            case "UNLOCK": return ICON_UNLOCK;
+            case "KEY": return ICON_KEY;
+            case "FINGERPRINT": return ICON_FINGERPRINT;
+
+				// Premium & Special
+            case "CROWN": return ICON_CROWN;
+            case "VIP": return ICON_VIP;
+            case "GIFT": return ICON_GIFT;
+            case "TROPHY": return ICON_TROPHY;
+
+				// Files & Folders
+            case "FOLDER": return ICON_FOLDER;
+            case "FILE": return ICON_FILE;
+            case "BOX": return ICON_BOX;
+
+				// Edit
+            case "PENCIL": return ICON_PENCIL;
+            case "ERASER": return ICON_ERASER;
+            case "PALETTE": return ICON_PALETTE;
+
+				// Links & External
+            case "LINK": return ICON_LINK;
+            case "EXTERNAL": return ICON_EXTERNAL;
+            case "SHARE": return ICON_SHARE;
+            case "GITHUB": return ICON_GITHUB;
+            case "YOUTUBE": return ICON_YOUTUBE;
+
+				// Category & Collapse
+            case "APPS": return ICON_APPS;
+            case "DASHBOARD": return ICON_DASHBOARD;
+            case "LIST": return ICON_LIST;
+
+            default: return null;
+        }
+    }
+
+    /**
+     * İkon key'ine göre renk döndürür
+     */
+    private int getIconColorFromKey(String key) {
+        if (key == null) return ACCENT_PINK;
+
+        switch (key) {
+				// Blue tones
+            case "EYE":
+            case "RADAR":
+            case "WIFI":
+            case "LINK":
+            case "EXTERNAL":
+            case "INFO":
+            case "DATABASE":
+            case "SLIDER":
+                return ACCENT_BLUE;
+
+				// Mint/Green tones
+            case "SPEED":
+            case "FLASH":
+            case "ROCKET":
+            case "SUCCESS":
+            case "CHECK":
+            case "PLAY":
+            case "UPLOAD":
+            case "DOWNLOAD":
+                return ACCENT_MINT;
+
+				// Purple tones
+            case "SHIELD":
+            case "GHOST":
+            case "MAGIC":
+            case "SPY":
+            case "SETTINGS":
+            case "APPS":
+            case "DASHBOARD":
+            case "CHECKBOX":
+            case "RADIO":
+                return ACCENT_PURPLE;
+
+				// Rose/Red tones
+            case "TARGET":
+            case "CROSSHAIR":
+            case "SWORD":
+            case "BUG":
+            case "ERROR":
+            case "CLOSE":
+            case "SKULL":
+            case "STOP":
+                return ACCENT_ROSE;
+
+				// Peach/Orange tones
+            case "FIRE":
+            case "STAR":
+            case "CROWN":
+            case "TROPHY":
+            case "WARNING":
+            case "FOLDER":
+            case "BOX":
+                return ACCENT_PEACH;
+
+				// Pink tones (default)
+            case "HEART":
+            case "LOCATION":
+            case "VIP":
+            case "GIFT":
+            case "TOGGLE":
+            case "USER":
+            case "USERS":
+            default:
+                return ACCENT_PINK;
+        }
     }
 
     //================== FEATURE LIST PARSER ==================//
@@ -1593,6 +2365,14 @@ public class Menu {
                 feature = feature.replace("CollapseAdd_", "");
             }
 
+            // C++'dan ikon parse et
+            String iconKey = extractIconKey(feature);
+            String icon = getIconFromKey(iconKey);  // null olabilir
+            int iconColor = getIconColorFromKey(iconKey);
+
+            // İkon kısmını feature'dan çıkar
+            feature = removeIconFromName(feature);
+
             String[] parts = feature.split("_");
 
             if (TextUtils.isDigitsOnly(parts[0]) || parts[0].matches("-?\\d+")) {
@@ -1607,51 +2387,57 @@ public class Menu {
 
             switch (p[0]) {
                 case "Toggle":
-                    Switch(target, featNum, p[1], defOn);
+                    Switch(target, featNum, p[1], defOn, icon, iconColor);
                     break;
                 case "SeekBar":
-                    SeekBar(target, featNum, p[1], Integer.parseInt(p[2]), Integer.parseInt(p[3]));
+                    SeekBar(target, featNum, p[1], Integer.parseInt(p[2]), Integer.parseInt(p[3]), icon, iconColor);
                     break;
                 case "Button":
-                    Button(target, featNum, p[1]);
+                    Button(target, featNum, p[1], icon, iconColor);
                     break;
                 case "ButtonOnOff":
-                    ButtonOnOff(target, featNum, p[1], defOn);
+                    ButtonOnOff(target, featNum, p[1], defOn, icon);
                     break;
                 case "Spinner":
-                    Spinner(target, featNum, p[1], p[2]);
+                    Spinner(target, featNum, p[1], p[2], icon, iconColor);
                     break;
                 case "InputText":
-                    InputText(target, featNum, p[1]);
+                    InputText(target, featNum, p[1], icon, iconColor);
                     break;
                 case "InputValue":
-                    if (p.length == 3) InputNum(target, featNum, p[2], Integer.parseInt(p[1]));
-                    else InputNum(target, featNum, p[1], 0);
+                    if (p.length == 3) {
+                        InputNum(target, featNum, p[2], Integer.parseInt(p[1]), icon, iconColor);
+                    } else {
+                        InputNum(target, featNum, p[1], 0, icon, iconColor);
+                    }
                     break;
                 case "InputLValue":
-                    if (p.length == 3) InputLNum(target, featNum, p[2], Long.parseLong(p[1]));
-                    else InputLNum(target, featNum, p[1], 0);
+                    if (p.length == 3) {
+                        InputLNum(target, featNum, p[2], Long.parseLong(p[1]), icon, iconColor);
+                    } else {
+                        InputLNum(target, featNum, p[1], 0, icon, iconColor);
+                    }
                     break;
                 case "CheckBox":
-                    CheckBox(target, featNum, p[1], defOn);
+                    CheckBox(target, featNum, p[1], defOn, icon, iconColor);
                     break;
                 case "RadioButton":
-                    RadioButton(target, featNum, p[1], p[2]);
+                    RadioButton(target, featNum, p[1], p[2], icon, iconColor);
                     break;
                 case "Collapse":
-                    Collapse(target, p[1], defOn);
+                    Collapse(target, p[1], defOn, icon, iconColor);
                     subFeat++;
                     break;
                 case "ButtonLink":
-                    ButtonLink(target, p[1], p[2]);
+                    ButtonLink(target, p[1], p[2], icon, iconColor);
                     subFeat++;
                     break;
                 case "Category":
-                    Category(target, p[1]);
+                    Category(target, p[1], icon, iconColor);
                     subFeat++;
                     break;
                 case "RichTextView":
-                    TextView(target, p[1]);
+                    TextView(target, p[1], icon, iconColor);
                     subFeat++;
                     break;
             }
@@ -1674,9 +2460,9 @@ public class Menu {
 				public void run() {
 					if (Preferences.loadPref && !IsGameLibLoaded() && !stopChecking) {
 						if (!loaded) {
-							Category(mods, "LOADING");
-							TextView(mods, "Waiting for game library...");
-							Button(mods, -100, "Force Load");
+							Category(mods, "LOADING", ICON_REFRESH, ACCENT_BLUE);
+							TextView(mods, "Waiting for game library...", ICON_TIMER, TEXT_MUTED);
+							Button(mods, -100, "Force Load", ICON_FLASH, ACCENT_PEACH);
 							loaded = true;
 						}
 						handler.postDelayed(this, 500);
@@ -1691,13 +2477,13 @@ public class Menu {
     @SuppressLint("WrongConstant")
     public void SetWindowManagerWindowService() {
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
-			WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
-			WindowManager.LayoutParams.TYPE_PHONE;
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
+            WindowManager.LayoutParams.TYPE_PHONE;
 
         vmParams = new WindowManager.LayoutParams(
-			WRAP_CONTENT, WRAP_CONTENT, type,
-			WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-			PixelFormat.TRANSLUCENT
+            WRAP_CONTENT, WRAP_CONTENT, type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
         );
         vmParams.gravity = Gravity.TOP | Gravity.START;
         vmParams.x = POS_X;
@@ -1714,10 +2500,10 @@ public class Menu {
     @SuppressLint("WrongConstant")
     public void SetWindowManagerActivity() {
         vmParams = new WindowManager.LayoutParams(
-			WRAP_CONTENT, WRAP_CONTENT,
-			WindowManager.LayoutParams.TYPE_APPLICATION,
-			WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-			PixelFormat.TRANSLUCENT
+            WRAP_CONTENT, WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
         );
         vmParams.gravity = Gravity.TOP | Gravity.START;
         vmParams.x = POS_X;
@@ -1772,12 +2558,12 @@ public class Menu {
                             mExpanded.setScaleX(0.9f);
                             mExpanded.setScaleY(0.9f);
                             mExpanded.animate()
-								.alpha(1f)
-								.scaleX(1f)
-								.scaleY(1f)
-								.setDuration(250)
-								.setInterpolator(new OvershootInterpolator(1.1f))
-								.start();
+                                .alpha(1f)
+                                .scaleX(1f)
+                                .scaleY(1f)
+                                .setDuration(250)
+                                .setInterpolator(new OvershootInterpolator(1.1f))
+                                .start();
                         }
                         return true;
                 }
@@ -1817,10 +2603,12 @@ public class Menu {
         };
     }
 
+    //================== UTILITY METHODS ==================//
+
     private int dp(int val) {
         return (int) TypedValue.applyDimension(
-			TypedValue.COMPLEX_UNIT_DIP, val,
-			getContext.getResources().getDisplayMetrics()
+            TypedValue.COMPLEX_UNIT_DIP, val,
+            getContext.getResources().getDisplayMetrics()
         );
     }
 
@@ -1837,5 +2625,25 @@ public class Menu {
             } catch (Exception e) {
             }
         }
+    }
+
+    //================== STATIC HELPERS FOR EXTERNAL USE ==================//
+
+    public static Menu getInstance() {
+        return instance;
+    }
+
+    /**
+     * Dışarıdan ikon almak için yardımcı metod
+     */
+    public String getIcon(String key) {
+        return getIconFromKey(key);
+    }
+
+    /**
+     * Font yüklenip yüklenmediğini kontrol et
+     */
+    public boolean areFontsLoaded() {
+        return fontsLoaded;
     }
 }
