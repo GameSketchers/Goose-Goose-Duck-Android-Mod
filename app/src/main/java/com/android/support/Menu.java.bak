@@ -34,12 +34,15 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -48,16 +51,99 @@ public class Menu {
 
     public static final String TAG = "Mod_Menu";
 
+    //================== ESP SYSTEM VARIABLES ==================//
     private static ESPView espView;
     private static WindowManager espWindowManager;
     private static Handler espHandler;
+    private static Runnable espRunnable;
     private static boolean espEnabled = false;
     private static Menu instance;
 
-    private Typeface menuFont;
-    private Typeface iconFont;
+    //================== FONTS ==================//
+    private Typeface menuFont;      // M PLUS Rounded 1c
+    private Typeface iconFont;      // Remix Icon
     private boolean fontsLoaded = false;
 
+	//================== REMIX ICON CODES (v3.5.0) ==================//
+
+// Navigation & UI
+public static final String ICON_SETTINGS = "\uF0EA";
+public static final String ICON_BACK = "\uF5D5";
+public static final String ICON_CLOSE = "\uEB98";
+public static final String ICON_CHECK = "\uEB7A";
+public static final String ICON_ARROW_DOWN = "\uEA4D";
+public static final String ICON_ARROW_RIGHT = "\uEA6D";
+
+// Game & Mod Icons
+public static final String ICON_EYE = "\uECB4";
+public static final String ICON_EYE_OFF = "\uECB2";
+public static final String ICON_SPEED = "\uEC11";
+public static final String ICON_GAMEPAD = "\uEDAA";
+public static final String ICON_TARGET = "\uF63A";
+public static final String ICON_CROSSHAIR = "\uF3B2";
+public static final String ICON_SHIELD = "\uF103";
+public static final String ICON_SWORD = "\uF264";
+public static final String ICON_MAGIC = "\uF35B";
+public static final String ICON_FLASH = "\uED3D";
+public static final String ICON_FIRE = "\uEC33";
+public static final String ICON_GHOST = "\uEDB4";
+public static final String ICON_SKULL = "\uF147";
+
+// User & People
+public static final String ICON_USER = "\uF254";
+public static final String ICON_USERS = "\uF266";
+public static final String ICON_SPY = "\uF13A";
+
+// Location & Map
+public static final String ICON_LOCATION = "\uEE4A";
+public static final String ICON_RADAR = "\uF492";
+
+// System & Debug
+public static final String ICON_BUG = "\uEB06";
+public static final String ICON_WIFI = "\uF2B6";
+public static final String ICON_DATABASE = "\uEAAF";
+
+// Actions
+public static final String ICON_ROCKET = "\uEF48";
+public static final String ICON_PLAY = "\uEFAA";
+public static final String ICON_STOP = "\uF1A6";
+public static final String ICON_REFRESH = "\uF1B3";
+public static final String ICON_DOWNLOAD = "\uEA57";
+public static final String ICON_UPLOAD = "\uF248";
+
+// Status & Info
+public static final String ICON_STAR = "\uF185";
+public static final String ICON_HEART = "\uED2E";
+public static final String ICON_TIMER = "\uF212";
+public static final String ICON_INFO = "\uED5C";
+public static final String ICON_WARNING = "\uEC53";
+public static final String ICON_ERROR = "\uECA0";
+public static final String ICON_SUCCESS = "\uEB81";
+
+// Premium & Special
+public static final String ICON_CROWN = "\uEAA5";
+public static final String ICON_VIP = "\uF270";
+public static final String ICON_GIFT = "\uECC6";
+public static final String ICON_TROPHY = "\uF228";
+
+// Files & Folders
+public static final String ICON_FOLDER = "\uECBC";
+public static final String ICON_BOX = "\uEA36";
+
+// Links & External
+public static final String ICON_LINK = "\uEEAF";
+public static final String ICON_EXTERNAL = "\uEC90";
+public static final String ICON_GITHUB = "\uEDCA";
+public static final String ICON_YOUTUBE = "\uF2D4";
+
+// Category & Collapse
+public static final String ICON_APPS = "\uEA08";
+public static final String ICON_DASHBOARD = "\uEAB2";
+
+    // İkon-renk eşleştirme
+    private static final Map<String, Integer> ICON_COLORS = new HashMap<>();
+
+    //================== SOFT DARK ANIME PALETTE ==================//
     int BG_PRIMARY = Color.parseColor("#FF16141F");
     int BG_SECONDARY = Color.parseColor("#FF1E1B2E");
     int BG_CARD = Color.parseColor("#FF252236");
@@ -82,7 +168,7 @@ public class Menu {
     int BORDER_ACCENT = Color.parseColor("#44D4A5C9");
 
     int MENU_WIDTH = 305;
-    int MENU_HEIGHT = 205;
+    int MENU_HEIGHT = 245;
     int PADDING = 16;
     int ITEM_SPACING = 8;
     int RADIUS_XL = 24;
@@ -95,6 +181,7 @@ public class Menu {
     int POS_X = 0;
     int POS_Y = 100;
 
+    //================== COMPONENTS ==================//
     RelativeLayout mRootContainer;
     FrameLayout mCollapsed;
     LinearLayout mExpanded, mods, mSettings, mCollapse;
@@ -118,7 +205,11 @@ public class Menu {
         instance = this;
         Preferences.context = context;
 
+        // Fontları yükle
         loadFonts(context);
+
+        // İkon renklerini ayarla
+        initIconColors();
 
         rootFrame = new FrameLayout(context);
         mRootContainer = new RelativeLayout(context);
@@ -172,45 +263,65 @@ public class Menu {
         Init(context, (TextView) header.getChildAt(0), subtitle);
     }
 
+    //================== FONT LOADING ==================//
+
     private void loadFonts(Context context) {
         try {
+            // Assets klasöründen fontları yükle
             menuFont = Typeface.createFromAsset(context.getAssets(), "fonts/MPLUSRounded1c-Medium.ttf");
             iconFont = Typeface.createFromAsset(context.getAssets(), "fonts/remixicon.ttf");
             fontsLoaded = true;
         } catch (Exception e) {
+            // Font yüklenemezse varsayılan fontları kullan
             menuFont = Typeface.create("sans-serif-medium", Typeface.NORMAL);
             iconFont = Typeface.DEFAULT;
             fontsLoaded = false;
+            e.printStackTrace();
         }
     }
 
-    private int getColorForIcon(String icon) {
-        if (icon == null || icon.isEmpty()) return ACCENT_PINK;
-        char c = icon.charAt(0);
-        switch (c) {
-            case '\uECB4': case '\uF04B': case '\uF2BF': case '\uEEAF': case '\uEC90': case '\uF447': case '\uEC15': case '\uF403':
-                return ACCENT_BLUE;
-            case '\uEC11': case '\uED3D': case '\uF093': case '\uEB80': case '\uEB7A': case '\uF00A': case '\uF24F': case '\uEC59':
-                return ACCENT_MINT;
-            case '\uF103': case '\uEDB4': case '\uF35B': case '\uF17E': case '\uF0EA': case '\uEA08': case '\uEAB2': case '\uEB82': case '\uF04F':
-                return ACCENT_PURPLE;
-            case '\uF63A': case '\uF3B2': case '\uF1CE': case '\uEB06': case '\uEB96': case '\uEB98': case '\uF147': case '\uF1A0':
-                return ACCENT_ROSE;
-            case '\uED32': case '\uF185': case '\uEAA5': case '\uF228': case '\uECA0': case '\uECBC': case '\uEA36':
-                return ACCENT_PEACH;
-            default:
-                return ACCENT_PINK;
-        }
+    private void initIconColors() {
+        ICON_COLORS.put(ICON_EYE, ACCENT_BLUE);
+        ICON_COLORS.put(ICON_SPEED, ACCENT_MINT);
+        ICON_COLORS.put(ICON_SHIELD, ACCENT_PURPLE);
+        ICON_COLORS.put(ICON_TARGET, ACCENT_ROSE);
+        ICON_COLORS.put(ICON_GHOST, ACCENT_PURPLE);
+        ICON_COLORS.put(ICON_FIRE, ACCENT_PEACH);
+        ICON_COLORS.put(ICON_FLASH, ACCENT_MINT);
+        ICON_COLORS.put(ICON_RADAR, ACCENT_BLUE);
+        ICON_COLORS.put(ICON_LOCATION, ACCENT_PINK);
+        ICON_COLORS.put(ICON_SETTINGS, ACCENT_PURPLE);
+        ICON_COLORS.put(ICON_BUG, ACCENT_ROSE);
+        ICON_COLORS.put(ICON_ROCKET, ACCENT_PEACH);
+        // Varsayılan renk ACCENT_PINK
     }
+
+    private int getIconColor(String icon) {
+        Integer color = ICON_COLORS.get(icon);
+        return color != null ? color : ACCENT_PINK;
+    }
+
+    // Typeface getter'ları
+    public Typeface getMenuFont() {
+        return menuFont;
+    }
+
+    public Typeface getIconFont() {
+        return iconFont;
+    }
+
+    //================== ESP SYSTEM METHODS ==================//
 
     public void initESP() {
         if (espView != null) return;
+
         try {
             espWindowManager = (WindowManager) getContext.getSystemService(Context.WINDOW_SERVICE);
             espView = new ESPView(getContext);
-            espView.setIconFont(iconFont);
             espWindowManager.addView(espView, ESPView.createLayoutParams());
+
             espHandler = new Handler(Looper.getMainLooper());
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -218,18 +329,24 @@ public class Menu {
 
     public static void batchDrawESP(String data) {
         if (espView == null) return;
+
         espView.clearAll();
+
         if (!espEnabled || data == null || data.isEmpty()) {
             espView.refresh();
             return;
         }
+
         String[] items = data.split(";");
+
         for (String item : items) {
             if (item.isEmpty() || item.length() < 2) continue;
+
             try {
                 char type = item.charAt(0);
                 String content = item.substring(1);
                 String[] parts = content.split(",");
+
                 switch (type) {
                     case 'L':
                         if (parts.length >= 5) {
@@ -242,6 +359,7 @@ public class Menu {
                             );
                         }
                         break;
+
                     case 'B':
                         if (parts.length >= 5) {
                             espView.addBox(
@@ -253,6 +371,7 @@ public class Menu {
                             );
                         }
                         break;
+
                     case 'T':
                         if (parts.length >= 4) {
                             espView.addText(
@@ -263,40 +382,12 @@ public class Menu {
                             );
                         }
                         break;
-                    case 'I':
-                        if (parts.length >= 4) {
-                            espView.addIcon(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                parts[2],
-                                parseColor(parts[3])
-                            );
-                        }
-                        break;
-                    case 'C':
-                        if (parts.length >= 4) {
-                            espView.addCircle(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                Float.parseFloat(parts[2]),
-                                parseColor(parts[3])
-                            );
-                        }
-                        break;
-                    case 'F':
-                        if (parts.length >= 5) {
-                            espView.addFilledBox(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                Float.parseFloat(parts[2]),
-                                Float.parseFloat(parts[3]),
-                                parseColor(parts[4])
-                            );
-                        }
-                        break;
                 }
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                // Parse error, skip
+            }
         }
+
         espView.refresh();
     }
 
@@ -310,26 +401,41 @@ public class Menu {
 
     public static void setESPEnabled(boolean enabled) {
         espEnabled = enabled;
-        if (espView != null) espView.setDrawing(enabled);
+        if (espView != null) {
+            espView.setDrawing(enabled);
+        }
     }
 
     public static int getScreenWidth() {
-        return espView != null ? espView.getRealWidth() : 1080;
+        if (espView != null) {
+            return espView.getRealWidth();
+        }
+        return 1080;
     }
 
     public static int getScreenHeight() {
-        return espView != null ? espView.getRealHeight() : 2400;
+        if (espView != null) {
+            return espView.getRealHeight();
+        }
+        return 2400;
     }
 
     public void destroyESP() {
-        if (espHandler != null) espHandler.removeCallbacksAndMessages(null);
+        if (espHandler != null) {
+            espHandler.removeCallbacksAndMessages(null);
+        }
+
         if (espView != null && espWindowManager != null) {
             try {
                 espWindowManager.removeView(espView);
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
             espView = null;
         }
     }
+
+    //================== ICON HELPER ==================//
 
     private TextView createIconView(String iconCode, int color) {
         TextView iconView = new TextView(getContext);
@@ -343,6 +449,12 @@ public class Menu {
         iconView.setLayoutParams(params);
         return iconView;
     }
+
+    private TextView createIconView(String iconCode) {
+        return createIconView(iconCode, getIconColor(iconCode));
+    }
+
+    //================== ICON SETUP ==================//
 
     private void setupIcon(Context context) {
         View ring = new View(context);
@@ -379,6 +491,7 @@ public class Menu {
             FrameLayout.LayoutParams wParams = new FrameLayout.LayoutParams(dp(ICON_SIZE - 14), dp(ICON_SIZE - 14));
             wParams.gravity = Gravity.CENTER;
             wView.setLayoutParams(wParams);
+
             wView.loadData(
                 "<html><body style='margin:0;padding:0;background:transparent;'>" +
                 "<img src='" + webData + "' width='100%' height='100%' style='object-fit:contain;'/>" +
@@ -394,8 +507,10 @@ public class Menu {
             imgParams.gravity = Gravity.CENTER;
             iconImg.setLayoutParams(imgParams);
             iconImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
             String base64 = null;
             try { base64 = Icon(); } catch (Throwable ignored) {}
+
             if (base64 != null && base64.trim().length() > 20) {
                 try {
                     byte[] data = Base64.decode(base64, Base64.DEFAULT);
@@ -422,11 +537,14 @@ public class Menu {
         mExpanded.setClipToOutline(true);
     }
 
+	//================== HEADER ==================//
+
     private LinearLayout buildHeader(Context context) {
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(PADDING), dp(14), dp(PADDING), dp(8));
+
         header.setOnTouchListener(menuDragListener());
 
         TextView title = new TextView(context);
@@ -436,7 +554,7 @@ public class Menu {
         title.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
 
         final TextView settingsBtn = new TextView(context);
-        settingsBtn.setText("\uF0EA");
+        settingsBtn.setText(ICON_SETTINGS);  // Gear ikonu
         settingsBtn.setTextColor(ACCENT_PURPLE);
         settingsBtn.setTextSize(22f);
         settingsBtn.setTypeface(iconFont);
@@ -444,9 +562,11 @@ public class Menu {
 
         settingsBtn.setOnClickListener(new View.OnClickListener() {
 				boolean isSettings = false;
+
 				@Override
 				public void onClick(View v) {
 					isSettings = !isSettings;
+
 					scrollView.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
 							@Override
 							public void run() {
@@ -456,15 +576,18 @@ public class Menu {
 								scrollView.animate().alpha(1f).setDuration(150).start();
 							}
 						}).start();
-					settingsBtn.setText(isSettings ? "\uF5D5" : "\uF0EA");
+
+					// Settings açıkken BACK ikonu, kapalıyken SETTINGS ikonu
+					settingsBtn.setText(isSettings ? ICON_BACK : ICON_SETTINGS);
 				}
 			});
 
         header.addView(title);
         header.addView(settingsBtn);
+
         return header;
     }
-
+	
     private TextView buildSubtitle(Context context) {
         TextView sub = new TextView(context);
         sub.setEllipsize(TextUtils.TruncateAt.MARQUEE);
@@ -488,6 +611,8 @@ public class Menu {
         return div;
     }
 
+    //================== FOOTER ==================//
+
     private LinearLayout buildFooter(Context context) {
         LinearLayout footer = new LinearLayout(context);
         footer.setOrientation(LinearLayout.HORIZONTAL);
@@ -498,6 +623,7 @@ public class Menu {
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, dp(40), 1);
         btnParams.setMargins(dp(6), 0, dp(6), 0);
 
+        // Hide Button
         LinearLayout hideBtn = new LinearLayout(context);
         hideBtn.setLayoutParams(btnParams);
         hideBtn.setGravity(Gravity.CENTER);
@@ -509,7 +635,7 @@ public class Menu {
         hideBtn.setBackground(hideBg);
 
         TextView hideIcon = new TextView(context);
-        hideIcon.setText("\uECB2");
+        hideIcon.setText(ICON_EYE_OFF);
         hideIcon.setTextColor(TEXT_SECONDARY);
         hideIcon.setTextSize(14f);
         hideIcon.setTypeface(iconFont);
@@ -548,12 +674,16 @@ public class Menu {
 				public boolean onLongClick(View v) {
 					Toast.makeText(getContext, "Menu killed", Toast.LENGTH_SHORT).show();
 					if (rootFrame != null && mWindowManager != null) {
-						try { mWindowManager.removeView(rootFrame); } catch (Exception e) {}
+						try {
+							mWindowManager.removeView(rootFrame);
+						} catch (Exception e) {
+						}
 					}
 					return true;
 				}
 			});
 
+        // Close Button
         LinearLayout closeBtn = new LinearLayout(context);
         closeBtn.setLayoutParams(btnParams);
         closeBtn.setGravity(Gravity.CENTER);
@@ -568,7 +698,7 @@ public class Menu {
         }
 
         TextView closeIcon = new TextView(context);
-        closeIcon.setText("\uEB98");
+        closeIcon.setText(ICON_CLOSE);
         closeIcon.setTextColor(BG_PRIMARY);
         closeIcon.setTextSize(14f);
         closeIcon.setTypeface(iconFont);
@@ -604,49 +734,36 @@ public class Menu {
 
         footer.addView(hideBtn);
         footer.addView(closeBtn);
+
         return footer;
     }
+
+    //================== CARD HELPERS ==================//
 
     private LinearLayout makeCard(boolean vertical) {
         LinearLayout card = new LinearLayout(getContext);
         card.setOrientation(vertical ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         if (!vertical) card.setGravity(Gravity.CENTER_VERTICAL);
+
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
         params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
         card.setLayoutParams(params);
         card.setPadding(dp(14), dp(14), dp(14), dp(14));
+
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_L));
         bg.setColor(BG_CARD);
         card.setBackground(bg);
+
         return card;
     }
 
-    private String extractIcon(String feature) {
-        if (feature.contains("[") && feature.contains("]")) {
-            int start = feature.indexOf("[");
-            int end = feature.indexOf("]");
-            if (start < end && start >= 0) {
-                return feature.substring(start + 1, end);
-            }
-        }
-        return null;
-    }
-
-    private String removeIconFromName(String name) {
-        if (name.contains("[") && name.contains("]")) {
-            int start = name.indexOf("[");
-            int end = name.indexOf("]");
-            if (start < end && start >= 0) {
-                return name.substring(0, start) + name.substring(end + 1);
-            }
-        }
-        return name;
-    }
+	//================== SWITCH ==================//
 
     private void Switch(LinearLayout parent, final int featNum, final String featName, boolean defaultOn, String icon, int iconColor) {
         LinearLayout card = makeCard(false);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -690,6 +807,7 @@ public class Menu {
                 isOn[0] = !isOn[0];
                 applySwitchStyle(track, thumb, isOn[0], true);
                 Preferences.changeFeatureBool(featName, featNum, isOn[0]);
+
                 if (featNum == -1) {
                     Preferences.with(getContext).writeBoolean(-1, isOn[0]);
                     if (!isOn[0]) Preferences.with(getContext).clear();
@@ -701,6 +819,7 @@ public class Menu {
         };
 
         card.setOnClickListener(toggle);
+
         card.addView(label);
         card.addView(switchFrame);
         parent.addView(card);
@@ -725,6 +844,7 @@ public class Menu {
         if (animate) {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) thumb.getLayoutParams();
             int startMargin = params.leftMargin;
+
             ValueAnimator anim = ValueAnimator.ofInt(startMargin, targetMargin);
             anim.setDuration(200);
             anim.setInterpolator(new OvershootInterpolator(1.5f));
@@ -744,6 +864,8 @@ public class Menu {
         }
     }
 
+	//================== SEEKBAR ==================//
+
     private void SeekBar(LinearLayout parent, final int featNum, final String featName, final int min, final int max, String icon, int iconColor) {
         int current = Preferences.loadPrefInt(featName, featNum);
         if (current < min) current = min;
@@ -753,6 +875,7 @@ public class Menu {
         LinearLayout header = new LinearLayout(getContext);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -832,14 +955,19 @@ public class Menu {
 					int val = prog + min;
 					value.setText(String.valueOf(val));
 					Preferences.changeFeatureInt(featName, featNum, val);
+
 					float pct = (max > min) ? (float) prog / (max - min) : 0;
 					int trackWidth = (int) ((sliderFrame.getWidth() - dp(20)) * pct) + dp(6);
 					FrameLayout.LayoutParams pp = (FrameLayout.LayoutParams) progressTrack.getLayoutParams();
 					pp.width = Math.max(dp(6), trackWidth);
 					progressTrack.setLayoutParams(pp);
 				}
-				@Override public void onStartTrackingTouch(android.widget.SeekBar sb) {}
-				@Override public void onStopTrackingTouch(android.widget.SeekBar sb) {}
+
+				@Override
+				public void onStartTrackingTouch(android.widget.SeekBar sb) {}
+
+				@Override
+				public void onStopTrackingTouch(android.widget.SeekBar sb) {}
 			});
 
         sliderFrame.post(new Runnable() {
@@ -863,6 +991,8 @@ public class Menu {
         parent.addView(card);
     }
 
+	//================== BUTTON ==================//
+
     private void Button(LinearLayout parent, final int featNum, final String featName, String icon, int iconColor) {
         LinearLayout btn = new LinearLayout(getContext);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(48));
@@ -871,6 +1001,7 @@ public class Menu {
         btn.setGravity(Gravity.CENTER);
         btn.setOrientation(LinearLayout.HORIZONTAL);
 
+        // Renk: ikon varsa iconColor, yoksa ACCENT_PINK
         int bgColor = (icon != null) ? iconColor : ACCENT_PINK;
 
         GradientDrawable bg = new GradientDrawable();
@@ -881,6 +1012,7 @@ public class Menu {
             btn.setElevation(dp(2));
         }
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -903,10 +1035,12 @@ public class Menu {
 				public void onClick(final View v) {
 					v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
 						.withEndAction(new Runnable() {
-							@Override public void run() {
+							@Override
+							public void run() {
 								v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
 							}
 						}).start();
+
 					if (featNum == -6) {
 						scrollView.removeAllViews();
 						scrollView.addView(mods);
@@ -919,6 +1053,8 @@ public class Menu {
 
         parent.addView(btn);
     }
+
+	//================== BUTTON ON/OFF ==================//
 
     private void ButtonOnOff(LinearLayout parent, final int featNum, String featName, boolean defaultOn, final String icon) {
         final String name = featName.replace("OnOff_", "");
@@ -934,6 +1070,7 @@ public class Menu {
             btn.setElevation(dp(2));
         }
 
+        // İkon - sadece null değilse ekle
         final TextView iconView;
         if (icon != null) {
             iconView = new TextView(getContext);
@@ -959,9 +1096,11 @@ public class Menu {
 					isOn[0] = !isOn[0];
 					applyOnOffStyle(btn, iconView, text, name, isOn[0]);
 					Preferences.changeFeatureBool(name, featNum, isOn[0]);
+
 					v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
 						.withEndAction(new Runnable() {
-							@Override public void run() {
+							@Override
+							public void run() {
 								v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
 							}
 						}).start();
@@ -974,12 +1113,18 @@ public class Menu {
     private void applyOnOffStyle(LinearLayout btn, TextView iconView, TextView text, String name, boolean on) {
         text.setText(name + (on ? "  :  ON" : "  :  OFF"));
         text.setTextColor(TEXT_PRIMARY);
-        if (iconView != null) iconView.setTextColor(on ? STATE_ON : STATE_OFF);
+
+        if (iconView != null) {
+            iconView.setTextColor(on ? STATE_ON : STATE_OFF);
+        }
+
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_L));
         bg.setColor(on ? STATE_ON : STATE_OFF);
         btn.setBackground(bg);
     }
+	
+	//================== BUTTON LINK ==================//
 
     private void ButtonLink(LinearLayout parent, final String name, final String url, String icon, int accentColor) {
         LinearLayout btn = new LinearLayout(getContext);
@@ -996,6 +1141,7 @@ public class Menu {
         bg.setStroke(dp(1), linkColor);
         btn.setBackground(bg);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -1026,6 +1172,8 @@ public class Menu {
         parent.addView(btn);
     }
 
+	//================== SPINNER ==================//
+
     private void Spinner(LinearLayout parent, final int featNum, final String featName, final String list, String icon, int iconColor) {
         final List<String> items = new LinkedList<>(Arrays.asList(list.split(",")));
         int sel = Preferences.loadPrefInt(featName, featNum);
@@ -1036,6 +1184,7 @@ public class Menu {
         LinearLayout header = new LinearLayout(getContext);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -1086,8 +1235,11 @@ public class Menu {
         parent.addView(card);
     }
 
+	//================== INPUT NUMBER ==================//
+
     private void InputNum(LinearLayout parent, final int featNum, final String featName, final int maxVal, final String icon, final int iconColor) {
         int num = Preferences.loadPrefInt(featName, featNum);
+
         final LinearLayout btn = createInputButton(featName, String.valueOf(num), icon, iconColor);
         final boolean hasIcon = (icon != null);
 
@@ -1106,8 +1258,11 @@ public class Menu {
         parent.addView(btn);
     }
 
+    //================== INPUT LONG NUMBER ==================//
+
     private void InputLNum(LinearLayout parent, final int featNum, final String featName, final long maxVal, final String icon, final int iconColor) {
         long num = Preferences.loadPrefLong(featName, featNum);
+
         final LinearLayout btn = createInputButton(featName, String.valueOf(num), icon, iconColor);
         final boolean hasIcon = (icon != null);
 
@@ -1126,9 +1281,12 @@ public class Menu {
         parent.addView(btn);
     }
 
+    //================== INPUT TEXT ==================//
+
     private void InputText(LinearLayout parent, final int featNum, final String featName, final String icon, final int iconColor) {
         String txt = Preferences.loadPrefString(featName, featNum);
         if (txt == null) txt = "";
+
         final LinearLayout btn = createInputButton(featName, txt, icon, iconColor);
         final boolean hasIcon = (icon != null);
 
@@ -1147,6 +1305,8 @@ public class Menu {
         parent.addView(btn);
     }
 
+    //================== INPUT BUTTON HELPERS ==================//
+
     private LinearLayout createInputButton(String name, String val, String icon, int iconColor) {
         LinearLayout btn = new LinearLayout(getContext);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(48));
@@ -1162,6 +1322,7 @@ public class Menu {
         bg.setStroke(dp(1), BORDER_SOFT);
         btn.setBackground(bg);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -1172,6 +1333,7 @@ public class Menu {
             btn.addView(iconView);
         }
 
+        // Text view
         TextView textView = new TextView(getContext);
         textView.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
         if (val == null || val.isEmpty()) {
@@ -1201,9 +1363,12 @@ public class Menu {
         }
     }
 
+	//================== CHECKBOX ==================//
+
     private void CheckBox(LinearLayout parent, final int featNum, final String featName, boolean defaultOn, String icon, final int iconColor) {
         LinearLayout card = makeCard(false);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -1239,9 +1404,11 @@ public class Menu {
 					checked[0] = !checked[0];
 					applyCheckStyle(checkBox, checked[0], checkColor);
 					Preferences.changeFeatureBool(featName, featNum, checked[0]);
+
 					checkBox.animate().scaleX(0.8f).scaleY(0.8f).setDuration(100)
 						.withEndAction(new Runnable() {
-							@Override public void run() {
+							@Override
+							public void run() {
 								checkBox.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
 							}
 						}).start();
@@ -1256,14 +1423,18 @@ public class Menu {
     private void applyCheckStyle(View box, boolean checked, int accentColor) {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(6));
+
         if (checked) {
             bg.setColor(accentColor);
         } else {
             bg.setColor(Color.TRANSPARENT);
             bg.setStroke(dp(2), TEXT_MUTED);
         }
+
         box.setBackground(bg);
     }
+
+	//================== RADIO BUTTON ==================//
 
     private void RadioButton(LinearLayout parent, final int featNum, String featName, final String list, String icon, final int iconColor) {
         final List<String> items = new LinkedList<>(Arrays.asList(list.split(",")));
@@ -1273,6 +1444,7 @@ public class Menu {
         LinearLayout header = new LinearLayout(getContext);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -1354,6 +1526,7 @@ public class Menu {
     private void applyRadioStyle(View radio, boolean selected, int accentColor) {
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
+
         if (selected) {
             bg.setColor(accentColor);
             bg.setStroke(dp(2), accentColor);
@@ -1361,8 +1534,11 @@ public class Menu {
             bg.setColor(Color.TRANSPARENT);
             bg.setStroke(dp(2), TEXT_MUTED);
         }
+
         radio.setBackground(bg);
     }
+
+	//================== COLLAPSE ==================//
 
     private void Collapse(LinearLayout parent, final String text, final boolean expanded, String icon, int bgColor) {
         final LinearLayout header = new LinearLayout(getContext);
@@ -1379,8 +1555,9 @@ public class Menu {
         hBg.setColor(headerColor);
         header.setBackground(hBg);
 
+        // Ok ikonu
         final TextView arrow = new TextView(getContext);
-        arrow.setText(expanded ? "\uEA4D" : "\uEA6D");
+        arrow.setText(expanded ? ICON_ARROW_DOWN : ICON_ARROW_RIGHT);
         arrow.setTextColor(BG_PRIMARY);
         arrow.setTextSize(18f);
         arrow.setTypeface(iconFont);
@@ -1414,7 +1591,8 @@ public class Menu {
 				@Override
 				public void onClick(View v) {
 					isOpen[0] = !isOpen[0];
-					arrow.setText(isOpen[0] ? "\uEA4D" : "\uEA6D");
+					arrow.setText(isOpen[0] ? ICON_ARROW_DOWN : ICON_ARROW_RIGHT);
+
 					if (isOpen[0]) {
 						content.setVisibility(View.VISIBLE);
 						content.setAlpha(0f);
@@ -1422,7 +1600,8 @@ public class Menu {
 					} else {
 						content.animate().alpha(0f).setDuration(150)
 							.withEndAction(new Runnable() {
-								@Override public void run() {
+								@Override
+								public void run() {
 									content.setVisibility(View.GONE);
 									content.setAlpha(1f);
 								}
@@ -1435,6 +1614,8 @@ public class Menu {
         parent.addView(content);
     }
 
+	//================== CATEGORY & TEXT ==================//
+
     private void Category(LinearLayout parent, String text, String icon, int iconColor) {
         LinearLayout container = new LinearLayout(getContext);
         container.setOrientation(LinearLayout.HORIZONTAL);
@@ -1443,6 +1624,7 @@ public class Menu {
         params.setMargins(0, dp(14), 0, dp(6));
         container.setLayoutParams(params);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -1476,6 +1658,7 @@ public class Menu {
         params.setMargins(0, dp(4), 0, dp(4));
         container.setLayoutParams(params);
 
+        // İkon - sadece null değilse ekle
         if (icon != null) {
             TextView iconView = new TextView(getContext);
             iconView.setText(icon);
@@ -1498,9 +1681,14 @@ public class Menu {
         parent.addView(container);
     }
 
-    interface OnInputResult { void onResult(String value); }
+	//================== DIALOGS ==================//
 
-    private void showNumberDialog(final String title, final int featNum, final long maxVal, final boolean isLong, final OnInputResult callback) {
+    interface OnInputResult {
+        void onResult(String value);
+    }
+
+    private void showNumberDialog(final String title, final int featNum, final long maxVal,
+                                  final boolean isLong, final OnInputResult callback) {
         final FrameLayout overlay = createDialogOverlay();
         LinearLayout dialog = createDialogBox(title, ACCENT_PINK);
 
@@ -1511,7 +1699,11 @@ public class Menu {
         input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
         input.setTextColor(TEXT_PRIMARY);
         input.setHintTextColor(TEXT_MUTED);
-        input.setHint(maxVal > 0 ? "Max: " + maxVal : "Enter number...");
+        if (maxVal > 0) {
+            input.setHint("Max: " + maxVal);
+        } else {
+            input.setHint("Enter number...");
+        }
         input.setTextSize(16f);
         input.setTypeface(menuFont);
         input.setGravity(Gravity.CENTER);
@@ -1524,7 +1716,10 @@ public class Menu {
 
         LinearLayout btns = createDialogButtons(
             new View.OnClickListener() {
-                @Override public void onClick(View v) { removeDialogOverlay(overlay); }
+                @Override
+                public void onClick(View v) {
+                    removeDialogOverlay(overlay);
+                }
             },
             new View.OnClickListener() {
                 @Override
@@ -1532,14 +1727,25 @@ public class Menu {
                     String txt = input.getText().toString().trim();
                     long val = 0;
                     try {
-                        if (!txt.isEmpty()) val = Long.parseLong(txt);
-                        if (maxVal > 0 && val > maxVal) val = maxVal;
+                        if (!txt.isEmpty()) {
+                            val = Long.parseLong(txt);
+                        }
+                        if (maxVal > 0 && val > maxVal) {
+                            val = maxVal;
+                        }
                     } catch (NumberFormatException e) {
                         val = maxVal > 0 ? maxVal : (isLong ? Long.MAX_VALUE : Integer.MAX_VALUE);
                     }
-                    if (isLong) Preferences.changeFeatureLong(title, featNum, val);
-                    else Preferences.changeFeatureInt(title, featNum, (int) val);
-                    if (callback != null) callback.onResult(String.valueOf(val));
+
+                    if (isLong) {
+                        Preferences.changeFeatureLong(title, featNum, val);
+                    } else {
+                        Preferences.changeFeatureInt(title, featNum, (int) val);
+                    }
+
+                    if (callback != null) {
+                        callback.onResult(String.valueOf(val));
+                    }
                     removeDialogOverlay(overlay);
                 }
             },
@@ -1548,6 +1754,7 @@ public class Menu {
 
         dialog.addView(input);
         dialog.addView(btns);
+
         showDialogOverlay(overlay, dialog);
     }
 
@@ -1568,8 +1775,11 @@ public class Menu {
         input.setGravity(Gravity.CENTER);
         input.setPadding(dp(14), dp(12), dp(14), dp(12));
 
+        // Mevcut değeri yükle
         String currentVal = Preferences.loadPrefString(title, featNum);
-        if (currentVal != null && !currentVal.isEmpty()) input.setText(currentVal);
+        if (currentVal != null && !currentVal.isEmpty()) {
+            input.setText(currentVal);
+        }
 
         GradientDrawable iBg = new GradientDrawable();
         iBg.setCornerRadius(dp(RADIUS_M));
@@ -1578,14 +1788,19 @@ public class Menu {
 
         LinearLayout btns = createDialogButtons(
             new View.OnClickListener() {
-                @Override public void onClick(View v) { removeDialogOverlay(overlay); }
+                @Override
+                public void onClick(View v) {
+                    removeDialogOverlay(overlay);
+                }
             },
             new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     String txt = input.getText().toString();
                     Preferences.changeFeatureString(title, featNum, txt);
-                    if (callback != null) callback.onResult(txt);
+                    if (callback != null) {
+                        callback.onResult(txt);
+                    }
                     removeDialogOverlay(overlay);
                 }
             },
@@ -1594,10 +1809,12 @@ public class Menu {
 
         dialog.addView(input);
         dialog.addView(btns);
+
         showDialogOverlay(overlay, dialog);
     }
 
-    private void showSpinnerDialog(final String title, final int featNum, final List<String> items, final int[] selected, final TextView dropdown) {
+    private void showSpinnerDialog(final String title, final int featNum, final List<String> items,
+                                   final int[] selected, final TextView dropdown) {
         final FrameLayout overlay = createDialogOverlay();
         LinearLayout dialog = createDialogBox(title, ACCENT_PURPLE);
 
@@ -1630,8 +1847,9 @@ public class Menu {
             icBg.setColor(isSelected ? Color.parseColor("#33A99FD3") : BG_CARD_LIGHT);
             itemContainer.setBackground(icBg);
 
+            // Check icon
             TextView checkIcon = new TextView(getContext);
-            checkIcon.setText("\uEB7A");
+            checkIcon.setText(ICON_CHECK);
             checkIcon.setTextColor(ACCENT_PURPLE);
             checkIcon.setTextSize(14f);
             checkIcon.setTypeface(iconFont);
@@ -1642,6 +1860,7 @@ public class Menu {
             checkIcon.setGravity(Gravity.CENTER);
             itemContainer.addView(checkIcon);
 
+            // Item text
             TextView itemView = new TextView(getContext);
             itemView.setText(item);
             itemView.setTextColor(isSelected ? ACCENT_PURPLE : TEXT_PRIMARY);
@@ -1665,12 +1884,19 @@ public class Menu {
 
         sv.addView(list);
         dialog.addView(sv);
+
         showDialogOverlay(overlay, dialog);
 
+        // Overlay'e tıklanınca kapat
         overlay.setOnClickListener(new View.OnClickListener() {
-				@Override public void onClick(View v) { removeDialogOverlay(overlay); }
+				@Override
+				public void onClick(View v) {
+					removeDialogOverlay(overlay);
+				}
 			});
     }
+
+    //================== DIALOG HELPERS ==================//
 
     private FrameLayout createDialogOverlay() {
         FrameLayout overlay = new FrameLayout(getContext);
@@ -1687,7 +1913,7 @@ public class Menu {
         params.gravity = Gravity.CENTER;
         box.setLayoutParams(params);
         box.setPadding(dp(20), dp(20), dp(20), dp(20));
-        box.setClickable(true);
+        box.setClickable(true); // Tıklamayı engelle, overlay'e geçmesin
 
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(RADIUS_XL));
@@ -1698,6 +1924,7 @@ public class Menu {
             box.setElevation(dp(20));
         }
 
+        // Title
         TextView titleView = new TextView(getContext);
         titleView.setText(title);
         titleView.setTextColor(accentColor);
@@ -1709,7 +1936,8 @@ public class Menu {
         return box;
     }
 
-    private LinearLayout createDialogButtons(View.OnClickListener onCancel, View.OnClickListener onOk, int okColor) {
+    private LinearLayout createDialogButtons(View.OnClickListener onCancel,
+                                             View.OnClickListener onOk, int okColor) {
         LinearLayout btns = new LinearLayout(getContext);
         btns.setOrientation(LinearLayout.HORIZONTAL);
         btns.setGravity(Gravity.CENTER);
@@ -1720,6 +1948,7 @@ public class Menu {
         LinearLayout.LayoutParams bParams = new LinearLayout.LayoutParams(0, dp(42), 1);
         bParams.setMargins(dp(4), 0, dp(4), 0);
 
+        // Cancel Button
         LinearLayout cancelBtn = new LinearLayout(getContext);
         cancelBtn.setLayoutParams(bParams);
         cancelBtn.setGravity(Gravity.CENTER);
@@ -1731,7 +1960,7 @@ public class Menu {
         cancelBtn.setBackground(cBg);
 
         TextView cancelIcon = new TextView(getContext);
-        cancelIcon.setText("\uEB98");
+        cancelIcon.setText(ICON_CLOSE);
         cancelIcon.setTextColor(TEXT_SECONDARY);
         cancelIcon.setTextSize(14f);
         cancelIcon.setTypeface(iconFont);
@@ -1747,6 +1976,7 @@ public class Menu {
 
         cancelBtn.setOnClickListener(onCancel);
 
+        // OK Button
         LinearLayout okBtn = new LinearLayout(getContext);
         okBtn.setLayoutParams(bParams);
         okBtn.setGravity(Gravity.CENTER);
@@ -1758,7 +1988,7 @@ public class Menu {
         okBtn.setBackground(oBg);
 
         TextView okIcon = new TextView(getContext);
-        okIcon.setText("\uEB7A");
+        okIcon.setText(ICON_CHECK);
         okIcon.setTextColor(BG_PRIMARY);
         okIcon.setTextSize(14f);
         okIcon.setTypeface(iconFont);
@@ -1783,14 +2013,18 @@ public class Menu {
     @SuppressLint("WrongConstant")
     private void showDialogOverlay(final FrameLayout overlay, final LinearLayout dialog) {
         overlay.addView(dialog);
+
         overlay.setAlpha(0f);
         dialog.setScaleX(0.85f);
         dialog.setScaleY(0.85f);
 
         if (overlayRequired) {
-            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
-                WindowManager.LayoutParams.TYPE_PHONE;
+            int type;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            } else {
+                type = WindowManager.LayoutParams.TYPE_PHONE;
+            }
 
             WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 MATCH_PARENT, MATCH_PARENT, type,
@@ -1800,11 +2034,13 @@ public class Menu {
             );
             mWindowManager.addView(overlay, params);
         } else {
-            ((Activity) getContext).addContentView(overlay, new ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT));
+            ((Activity) getContext).addContentView(overlay,
+												   new ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT));
         }
 
         overlay.animate().alpha(1f).setDuration(200).start();
-        dialog.animate().scaleX(1f).scaleY(1f).setDuration(250).setInterpolator(new OvershootInterpolator(1.1f)).start();
+        dialog.animate().scaleX(1f).scaleY(1f).setDuration(250)
+            .setInterpolator(new OvershootInterpolator(1.1f)).start();
     }
 
     private void removeDialogOverlay(final FrameLayout overlay) {
@@ -1819,12 +2055,253 @@ public class Menu {
                             }
                         } else {
                             ViewGroup parent = (ViewGroup) overlay.getParent();
-                            if (parent != null) parent.removeView(overlay);
+                            if (parent != null) {
+                                parent.removeView(overlay);
+                            }
                         }
-                    } catch (Exception e) {}
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
             }).start();
     }
+
+	//================== ICON PARSING FROM C++ ==================//
+
+    /**
+     * C++ string'inden ikon key çıkarır
+     * Format: "Toggle_[EYE]Feature Name" → "EYE"
+     * Eğer ikon yoksa null döner
+     */
+    private String extractIconKey(String feature) {
+        if (feature.contains("[") && feature.contains("]")) {
+            int start = feature.indexOf("[");
+            int end = feature.indexOf("]");
+            if (start < end && start >= 0) {
+                return feature.substring(start + 1, end);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Feature name'den [ICON_KEY] kısmını çıkarır
+     */
+    private String removeIconFromName(String name) {
+        if (name.contains("[") && name.contains("]")) {
+            int start = name.indexOf("[");
+            int end = name.indexOf("]");
+            if (start < end && start >= 0) {
+                return name.substring(0, start) + name.substring(end + 1);
+            }
+        }
+        return name;
+    }
+
+    /**
+     * İkon key'ini gerçek Unicode karakterine çevirir
+     */
+    private String getIconFromKey(String key) {
+        if (key == null) return null;
+
+        switch (key) {
+				// Navigation & UI
+            case "SETTINGS": return ICON_SETTINGS;
+            case "BACK": return ICON_BACK;
+            case "MENU": return ICON_MENU;
+            case "CLOSE": return ICON_CLOSE;
+            case "CHECK": return ICON_CHECK;
+            case "ADD": return ICON_ADD;
+            case "ARROW_UP": return ICON_ARROW_UP;
+            case "ARROW_DOWN": return ICON_ARROW_DOWN;
+            case "ARROW_LEFT": return ICON_ARROW_LEFT;
+            case "ARROW_RIGHT": return ICON_ARROW_RIGHT;
+
+				// Toggle & Controls
+            case "TOGGLE": return ICON_TOGGLE;
+            case "CHECKBOX": return ICON_CHECKBOX;
+            case "RADIO": return ICON_RADIO;
+            case "SLIDER": return ICON_SLIDER;
+            case "INPUT": return ICON_INPUT;
+            case "DROPDOWN": return ICON_DROPDOWN;
+
+				// Game & Mod
+            case "EYE": return ICON_EYE;
+            case "EYE_OFF": return ICON_EYE_OFF;
+            case "SPEED": return ICON_SPEED;
+            case "GAMEPAD": return ICON_GAMEPAD;
+            case "TARGET": return ICON_TARGET;
+            case "CROSSHAIR": return ICON_CROSSHAIR;
+            case "SHIELD": return ICON_SHIELD;
+            case "SWORD": return ICON_SWORD;
+            case "MAGIC": return ICON_MAGIC;
+            case "FLASH": return ICON_FLASH;
+            case "FIRE": return ICON_FIRE;
+            case "GHOST": return ICON_GHOST;
+            case "SKULL": return ICON_SKULL;
+
+				// User & People
+            case "USER": return ICON_USER;
+            case "USERS": return ICON_USERS;
+            case "SPY": return ICON_SPY;
+
+				// Location & Map
+            case "MAP": return ICON_MAP;
+            case "LOCATION": return ICON_LOCATION;
+            case "COMPASS": return ICON_COMPASS;
+            case "RADAR": return ICON_RADAR;
+            case "NAVIGATION": return ICON_NAVIGATION;
+
+				// System & Debug
+            case "BUG": return ICON_BUG;
+            case "CODE": return ICON_CODE;
+            case "TERMINAL": return ICON_TERMINAL;
+            case "CPU": return ICON_CPU;
+            case "WIFI": return ICON_WIFI;
+            case "DATABASE": return ICON_DATABASE;
+
+				// Actions
+            case "ROCKET": return ICON_ROCKET;
+            case "PLAY": return ICON_PLAY;
+            case "PAUSE": return ICON_PAUSE;
+            case "STOP": return ICON_STOP;
+            case "REFRESH": return ICON_REFRESH;
+            case "SAVE": return ICON_SAVE;
+            case "DOWNLOAD": return ICON_DOWNLOAD;
+            case "UPLOAD": return ICON_UPLOAD;
+
+				// Status & Info
+            case "STAR": return ICON_STAR;
+            case "HEART": return ICON_HEART;
+            case "INFINITY": return ICON_INFINITY;
+            case "TIMER": return ICON_TIMER;
+            case "INFO": return ICON_INFO;
+            case "WARNING": return ICON_WARNING;
+            case "ERROR": return ICON_ERROR;
+            case "SUCCESS": return ICON_SUCCESS;
+
+				// Media & View
+            case "CAMERA": return ICON_CAMERA;
+            case "VIDEO": return ICON_VIDEO;
+            case "ZOOM_IN": return ICON_ZOOM_IN;
+            case "ZOOM_OUT": return ICON_ZOOM_OUT;
+            case "FULLSCREEN": return ICON_FULLSCREEN;
+            case "PICTURE": return ICON_PICTURE;
+
+				// Security
+            case "LOCK": return ICON_LOCK;
+            case "UNLOCK": return ICON_UNLOCK;
+            case "KEY": return ICON_KEY;
+            case "FINGERPRINT": return ICON_FINGERPRINT;
+
+				// Premium & Special
+            case "CROWN": return ICON_CROWN;
+            case "VIP": return ICON_VIP;
+            case "GIFT": return ICON_GIFT;
+            case "TROPHY": return ICON_TROPHY;
+
+				// Files & Folders
+            case "FOLDER": return ICON_FOLDER;
+            case "FILE": return ICON_FILE;
+            case "BOX": return ICON_BOX;
+
+				// Edit
+            case "PENCIL": return ICON_PENCIL;
+            case "ERASER": return ICON_ERASER;
+            case "PALETTE": return ICON_PALETTE;
+
+				// Links & External
+            case "LINK": return ICON_LINK;
+            case "EXTERNAL": return ICON_EXTERNAL;
+            case "SHARE": return ICON_SHARE;
+            case "GITHUB": return ICON_GITHUB;
+            case "YOUTUBE": return ICON_YOUTUBE;
+
+				// Category & Collapse
+            case "APPS": return ICON_APPS;
+            case "DASHBOARD": return ICON_DASHBOARD;
+            case "LIST": return ICON_LIST;
+
+            default: return null;
+        }
+    }
+
+    /**
+     * İkon key'ine göre renk döndürür
+     */
+    private int getIconColorFromKey(String key) {
+        if (key == null) return ACCENT_PINK;
+
+        switch (key) {
+				// Blue tones
+            case "EYE":
+            case "RADAR":
+            case "WIFI":
+            case "LINK":
+            case "EXTERNAL":
+            case "INFO":
+            case "DATABASE":
+            case "SLIDER":
+                return ACCENT_BLUE;
+
+				// Mint/Green tones
+            case "SPEED":
+            case "FLASH":
+            case "ROCKET":
+            case "SUCCESS":
+            case "CHECK":
+            case "PLAY":
+            case "UPLOAD":
+            case "DOWNLOAD":
+                return ACCENT_MINT;
+
+				// Purple tones
+            case "SHIELD":
+            case "GHOST":
+            case "MAGIC":
+            case "SPY":
+            case "SETTINGS":
+            case "APPS":
+            case "DASHBOARD":
+            case "CHECKBOX":
+            case "RADIO":
+                return ACCENT_PURPLE;
+
+				// Rose/Red tones
+            case "TARGET":
+            case "CROSSHAIR":
+            case "SWORD":
+            case "BUG":
+            case "ERROR":
+            case "CLOSE":
+            case "SKULL":
+            case "STOP":
+                return ACCENT_ROSE;
+
+				// Peach/Orange tones
+            case "FIRE":
+            case "STAR":
+            case "CROWN":
+            case "TROPHY":
+            case "WARNING":
+            case "FOLDER":
+            case "BOX":
+                return ACCENT_PEACH;
+
+				// Pink tones (default)
+            case "HEART":
+            case "LOCATION":
+            case "VIP":
+            case "GIFT":
+            case "TOGGLE":
+            case "USER":
+            case "USERS":
+            default:
+                return ACCENT_PINK;
+        }
+    }
+
+    //================== FEATURE LIST PARSER ==================//
 
     private void featureList(String[] list, LinearLayout container) {
         int featNum, subFeat = 0;
@@ -1845,8 +2322,12 @@ public class Menu {
                 feature = feature.replace("CollapseAdd_", "");
             }
 
-            String icon = extractIcon(feature);
-            int iconColor = getColorForIcon(icon);
+            // C++'dan ikon parse et
+            String iconKey = extractIconKey(feature);
+            String icon = getIconFromKey(iconKey);  // null olabilir
+            int iconColor = getIconColorFromKey(iconKey);
+
+            // İkon kısmını feature'dan çıkar
             feature = removeIconFromName(feature);
 
             String[] parts = feature.split("_");
@@ -1881,12 +2362,18 @@ public class Menu {
                     InputText(target, featNum, p[1], icon, iconColor);
                     break;
                 case "InputValue":
-                    if (p.length == 3) InputNum(target, featNum, p[2], Integer.parseInt(p[1]), icon, iconColor);
-                    else InputNum(target, featNum, p[1], 0, icon, iconColor);
+                    if (p.length == 3) {
+                        InputNum(target, featNum, p[2], Integer.parseInt(p[1]), icon, iconColor);
+                    } else {
+                        InputNum(target, featNum, p[1], 0, icon, iconColor);
+                    }
                     break;
                 case "InputLValue":
-                    if (p.length == 3) InputLNum(target, featNum, p[2], Long.parseLong(p[1]), icon, iconColor);
-                    else InputLNum(target, featNum, p[1], 0, icon, iconColor);
+                    if (p.length == 3) {
+                        InputLNum(target, featNum, p[2], Long.parseLong(p[1]), icon, iconColor);
+                    } else {
+                        InputLNum(target, featNum, p[1], 0, icon, iconColor);
+                    }
                     break;
                 case "CheckBox":
                     CheckBox(target, featNum, p[1], defOn, icon, iconColor);
@@ -1914,20 +2401,25 @@ public class Menu {
         }
     }
 
+    //================== SYSTEM ==================//
+
     public void ShowMenu() {
         rootFrame.addView(mRootContainer);
+
+        // ESP sistemini başlat
         initESP();
 
         final Handler handler = new Handler();
         handler.postDelayed(new Runnable() {
 				boolean loaded = false;
+
 				@Override
 				public void run() {
 					if (Preferences.loadPref && !IsGameLibLoaded() && !stopChecking) {
 						if (!loaded) {
-							Category(mods, "LOADING", "\uF080", ACCENT_BLUE);
-							TextView(mods, "Waiting for game library...", "\uF210", TEXT_MUTED);
-							Button(mods, -100, "Force Load", "\uED3D", ACCENT_PEACH);
+							Category(mods, "LOADING", ICON_REFRESH, ACCENT_BLUE);
+							TextView(mods, "Waiting for game library...", ICON_TIMER, TEXT_MUTED);
+							Button(mods, -100, "Force Load", ICON_FLASH, ACCENT_PEACH);
 							loaded = true;
 						}
 						handler.postDelayed(this, 500);
@@ -1958,6 +2450,7 @@ public class Menu {
         mWindowManager.addView(rootFrame, vmParams);
 
         mCollapsed.setOnTouchListener(iconDragListener());
+
         overlayRequired = true;
     }
 
@@ -1979,6 +2472,8 @@ public class Menu {
         mCollapsed.setOnTouchListener(iconDragListener());
     }
 
+    //================== ICON DRAG LISTENER ==================//
+
     private View.OnTouchListener iconDragListener() {
         return new View.OnTouchListener() {
             private int startX, startY;
@@ -1996,16 +2491,22 @@ public class Menu {
                         touchY = event.getRawY();
                         dragging = false;
                         return true;
+
                     case MotionEvent.ACTION_MOVE:
                         int dx = (int) (event.getRawX() - touchX);
                         int dy = (int) (event.getRawY() - touchY);
-                        if (Math.abs(dx) > CLICK_THRESHOLD || Math.abs(dy) > CLICK_THRESHOLD) dragging = true;
+
+                        if (Math.abs(dx) > CLICK_THRESHOLD || Math.abs(dy) > CLICK_THRESHOLD) {
+                            dragging = true;
+                        }
+
                         if (dragging) {
                             vmParams.x = startX + dx;
                             vmParams.y = startY + dy;
                             mWindowManager.updateViewLayout(rootFrame, vmParams);
                         }
                         return true;
+
                     case MotionEvent.ACTION_UP:
                         if (!dragging) {
                             mCollapsed.setVisibility(View.GONE);
@@ -2014,7 +2515,9 @@ public class Menu {
                             mExpanded.setScaleX(0.9f);
                             mExpanded.setScaleY(0.9f);
                             mExpanded.animate()
-                                .alpha(1f).scaleX(1f).scaleY(1f)
+                                .alpha(1f)
+                                .scaleX(1f)
+                                .scaleY(1f)
                                 .setDuration(250)
                                 .setInterpolator(new OvershootInterpolator(1.1f))
                                 .start();
@@ -2025,6 +2528,8 @@ public class Menu {
             }
         };
     }
+
+    //================== MENU DRAG LISTENER ==================//
 
     private View.OnTouchListener menuDragListener() {
         return new View.OnTouchListener() {
@@ -2040,11 +2545,13 @@ public class Menu {
                         touchX = event.getRawX();
                         touchY = event.getRawY();
                         return true;
+
                     case MotionEvent.ACTION_MOVE:
                         vmParams.x = startX + (int) (event.getRawX() - touchX);
                         vmParams.y = startY + (int) (event.getRawY() - touchY);
                         mWindowManager.updateViewLayout(rootFrame, vmParams);
                         return true;
+
                     case MotionEvent.ACTION_UP:
                         return true;
                 }
@@ -2053,8 +2560,13 @@ public class Menu {
         };
     }
 
+    //================== UTILITY METHODS ==================//
+
     private int dp(int val) {
-        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, val, getContext.getResources().getDisplayMetrics());
+        return (int) TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, val,
+            getContext.getResources().getDisplayMetrics()
+        );
     }
 
     public void setVisibility(int visibility) {
@@ -2063,13 +2575,32 @@ public class Menu {
 
     public void onDestroy() {
         destroyESP();
+
         if (rootFrame != null && mWindowManager != null) {
-            try { mWindowManager.removeView(rootFrame); } catch (Exception e) {}
+            try {
+                mWindowManager.removeView(rootFrame);
+            } catch (Exception e) {
+            }
         }
     }
 
-    public static Menu getInstance() { return instance; }
-    public Typeface getMenuFont() { return menuFont; }
-    public Typeface getIconFont() { return iconFont; }
-    public boolean areFontsLoaded() { return fontsLoaded; }
+    //================== STATIC HELPERS FOR EXTERNAL USE ==================//
+
+    public static Menu getInstance() {
+        return instance;
+    }
+
+    /**
+     * Dışarıdan ikon almak için yardımcı metod
+     */
+    public String getIcon(String key) {
+        return getIconFromKey(key);
+    }
+
+    /**
+     * Font yüklenip yüklenmediğini kontrol et
+     */
+    public boolean areFontsLoaded() {
+        return fontsLoaded;
+    }
 }

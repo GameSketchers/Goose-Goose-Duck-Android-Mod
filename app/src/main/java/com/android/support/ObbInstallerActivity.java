@@ -46,17 +46,17 @@ public class ObbInstallerActivity extends Activity {
     private static final int BORDER_ACCENT = Color.parseColor("#44D4A5C9");
 
     //================== REMIX ICON CODES ==================//
-    private static final String ICON_DOWNLOAD = "\uEA57";
-    private static final String ICON_CHECK = "\uEB7A";
-    private static final String ICON_CLOSE = "\uEB98";
-    private static final String ICON_FOLDER = "\uECBC";
-    private static final String ICON_FILE = "\uEC57";
-    private static final String ICON_GAMEPAD = "\uEC74";
-    private static final String ICON_LOADING = "\uEEB5";  // loader-4-line
-    private static final String ICON_SUCCESS = "\uEB81";  // checkbox-circle-line
-    private static final String ICON_ERROR = "\uECA0";    // close-circle-line
-    private static final String ICON_INFO = "\uED5C";
-    private static final String ICON_ROCKET = "\uEF48";
+    private static final String ICON_DOWNLOAD = "\uECD8";
+    private static final String ICON_CHECK = "\uEB7B";
+    private static final String ICON_CLOSE = "\uEB99";
+    private static final String ICON_FOLDER = "\uED6A";
+    private static final String ICON_FILE = "\uECEB";
+    private static final String ICON_GAMEPAD = "\uEDAB";
+    private static final String ICON_LOADING = "\uEEC6";  // loader-4-line
+    private static final String ICON_SUCCESS = "\uF438";  // checkbox-circle-line
+    private static final String ICON_ERROR = "\uF3B6";    // close-circle-line
+    private static final String ICON_INFO = "\uF448";
+    private static final String ICON_ROCKET = "\uF094";
 
     //================== OBB ==================//
     private static final String OBB_FILE_NAME = "main.200524.com.Gaggle.fun.GooseGooseDuck.obb";

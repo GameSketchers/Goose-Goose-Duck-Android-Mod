@@ -83,20 +83,27 @@ struct Vector3 { float x, y, z; };
 #define OFFSET_PE_ISLOCAL            0x98
 #define OFFSET_PE_PLAYERROLE         0xA0
 #define OFFSET_PE_ISPLAYERROLESET    0xA8
+#define OFFSET_PE_KILLEDBY           0xB0
+#define OFFSET_PE_TARGETOPACITY      0xB8
+#define OFFSET_PE_TASKSREMAINING     0xC0
+#define OFFSET_PE_HASKILLED          0xC5
 #define OFFSET_PE_TEAMID             0xDC
 #define OFFSET_PE_FOGOFWAR           0xF4
-#define OFFSET_PE_ISGHOST            0x178
 #define OFFSET_PE_ENTITYNUMBER       0x88
-#define OFFSET_PE_TRANSFORMVIEW      0x2C0
-#define OFFSET_PE_TARGETOPACITY      0xB8
-#define OFFSET_PE_HASKILLED          0xC5
+#define OFFSET_PE_ISGHOST            0x178
+#define OFFSET_PE_ISINFECTED         0x17E
 #define OFFSET_PE_ISDOWNED           0x180
 #define OFFSET_PE_INVENT             0x182
+#define OFFSET_PE_HASBOMB            0x187
 #define OFFSET_PE_ISINVISIBLE        0x189
 #define OFFSET_PE_ISINPELICAN        0x18D
-#define OFFSET_PE_ISSPECTATOR        0x200
 #define OFFSET_PE_ISMORPHED          0x18F
+#define OFFSET_PE_ISSPECTATOR        0x200
 #define OFFSET_PE_ISRUNNING          0x121
+#define OFFSET_PE_TRANSFORMVIEW      0x2C0
+
+// PlayableEntity Static Fields
+#define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
 
 // GGDRole (TypeDefIndex: 5656) - Objects.PlayerRoles
 #define OFFSET_ROLE_TYPE             0x12
@@ -119,7 +126,7 @@ struct PlayerData {
     int role;
     int teamId;
     int entityNumber;
-    char name[128];  // UTF-8 için daha büyük buffer
+    char name[128];
     bool isValid;
     float distanceToLocal;
     bool isDowned;
@@ -131,6 +138,10 @@ struct PlayerData {
     bool isRunning;
     bool hasKilledThisRound;
     float opacity;
+    bool isInfected;
+    bool hasBomb;
+    int tasksRemaining;
+    char killedBy[128];
 };
 
 #define MAX_PLAYERS 20
@@ -140,6 +151,12 @@ Vector2 g_LocalPlayerPos;
 
 PlayerData g_RenderPlayers[MAX_PLAYERS];
 int g_RenderPlayerCount = 0;
+
+int g_DeadPlayersCount = 0;
+int g_LocalTasksRemaining = 0;
+char g_LocalKilledBy[128] = "";
+bool g_LocalIsInfected = false;
+bool g_LocalHasBomb = false;
 
 float g_ScreenWidth = 1080.0f;
 float g_ScreenHeight = 2400.0f;
@@ -152,6 +169,8 @@ bool g_ESPStabilized = false;
 #define MAX_ESP_BUFFER 32768
 char g_ESPBatchBuffer[MAX_ESP_BUFFER];
 int g_ESPBatchOffset = 0;
+
+void* g_PlayableEntityClass = NULL;
 
 inline void BatchClear() {
     g_ESPBatchOffset = 0;
@@ -175,14 +194,13 @@ inline void BatchAddBox(float x, float y, float w, float h, int color) {
 inline void BatchAddText(float x, float y, const char* text, int color) {
     if (!text || g_ESPBatchOffset >= MAX_ESP_BUFFER - 256) return;
     
-    // Sadece virgül ve noktalı virgülü escape et (parse için gerekli)
     char safeText[128];
     int j = 0;
     for (int i = 0; text[i] && j < 126; i++) {
         if (text[i] == ',' || text[i] == ';') {
-            safeText[j++] = ' ';  // Virgül ve noktalı virgülü boşluk yap
+            safeText[j++] = ' ';
         } else {
-            safeText[j++] = text[i];  // Diğer tüm karakterler (Türkçe dahil) olduğu gibi
+            safeText[j++] = text[i];
         }
     }
     safeText[j] = '\0';
@@ -190,6 +208,13 @@ inline void BatchAddText(float x, float y, const char* text, int color) {
     g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset,
         MAX_ESP_BUFFER - g_ESPBatchOffset,
         "T%.0f,%.0f,%s,%d;", x, y, safeText, color);
+}
+
+inline void BatchAddIcon(float x, float y, const char* icon, int color) {
+    if (!icon || g_ESPBatchOffset >= MAX_ESP_BUFFER - 64) return;
+    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset,
+        MAX_ESP_BUFFER - g_ESPBatchOffset,
+        "I%.0f,%.0f,%s,%d;", x, y, icon, color);
 }
 
 JavaVM* g_JavaVM = NULL;
@@ -213,16 +238,12 @@ JNIEnv* GetJNIEnv() {
     return env;
 }
 
-/**
- * UTF-16 (Unity string) -> UTF-8 dönüşümü
- * Türkçe karakterler dahil tüm Unicode karakterleri destekler
- */
-void WideCharToUTF8(void* instance, char* outName, int maxLen) {
+void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen) {
     memset(outName, 0, maxLen);
     
-    uintptr_t strPtr = *(uintptr_t*)((uintptr_t)instance + OFFSET_PE_NICKNAME);
+    uintptr_t strPtr = *(uintptr_t*)((uintptr_t)instance + offset);
     if (!strPtr) { 
-        strcpy(outName, "Unknown"); 
+        strcpy(outName, ""); 
         return; 
     }
     
@@ -230,7 +251,7 @@ void WideCharToUTF8(void* instance, char* outName, int maxLen) {
     uint16_t* chars = (uint16_t*)(strPtr + 0x14);
     
     if (length <= 0 || length > 50) { 
-        strcpy(outName, "Player"); 
+        strcpy(outName, ""); 
         return; 
     }
     
@@ -239,44 +260,44 @@ void WideCharToUTF8(void* instance, char* outName, int maxLen) {
         uint16_t c = chars[i];
         
         if (c < 0x80) {
-            // ASCII (0x00-0x7F)
-            if (c >= 0x20) {  // Yazdırılabilir karakterler
+            if (c >= 0x20) {
                 outName[outIdx++] = (char)c;
             }
         } else if (c < 0x800) {
-            // 2-byte UTF-8 (0x80-0x7FF) - Türkçe karakterler burada
             outName[outIdx++] = (char)(0xC0 | (c >> 6));
             outName[outIdx++] = (char)(0x80 | (c & 0x3F));
         } else if (c >= 0xD800 && c <= 0xDBFF) {
-            // Surrogate pair başlangıcı (emoji vb.)
             if (i + 1 < length) {
                 uint16_t c2 = chars[i + 1];
                 if (c2 >= 0xDC00 && c2 <= 0xDFFF) {
-                    // 4-byte UTF-8
                     uint32_t codepoint = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
                     outName[outIdx++] = (char)(0xF0 | (codepoint >> 18));
                     outName[outIdx++] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
                     outName[outIdx++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
                     outName[outIdx++] = (char)(0x80 | (codepoint & 0x3F));
-                    i++;  // Sonraki karakteri atla
+                    i++;
                 }
             }
         } else if (c >= 0xDC00 && c <= 0xDFFF) {
-            // Yalnız surrogate, atla
             continue;
         } else {
-            // 3-byte UTF-8 (0x800-0xFFFF)
             outName[outIdx++] = (char)(0xE0 | (c >> 12));
             outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F));
             outName[outIdx++] = (char)(0x80 | (c & 0x3F));
         }
     }
-    
-    if (outIdx == 0) {
+    outName[outIdx] = '\0';
+}
+
+void GetPlayerNickname(void* instance, char* outName, int maxLen) {
+    WideCharToUTF8(instance, OFFSET_PE_NICKNAME, outName, maxLen);
+    if (outName[0] == '\0') {
         strcpy(outName, "Player");
-    } else {
-        outName[outIdx] = '\0';
     }
+}
+
+void GetKilledBy(void* instance, char* outName, int maxLen) {
+    WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen);
 }
 
 int GetRoleType(void* instance) {
@@ -325,42 +346,11 @@ struct RoleInfo { const char* name; int color; };
 
 bool IsKillerRole(int roleId) {
     switch(roleId) {
-        case 2:
-        case 9:
-        case 10:
-        case 12:
-        case 14:
-        case 17:
-        case 18:
-        case 19:
-        case 23:
-        case 25:
-        case 27:
-        case 33:
-        case 36:
-        case 38:
-        case 41:
-        case 44:
-        case 46:
-        case 48:
-        case 51:
-        case 58:
-        case 59:
-        case 60:
-        case 62:
-        case 65:
-        case 66:
-        case 74:
-        case 75:
-        case 79:
-        case 81:
-        case 84:
-        case 85:
-        case 103:
-        case 104:
-        case 106:
-        case 108:
-        case 109:
+        case 2: case 9: case 10: case 12: case 14: case 17: case 18: case 19:
+        case 23: case 25: case 27: case 33: case 36: case 38: case 41: case 44:
+        case 46: case 48: case 51: case 58: case 59: case 60: case 62: case 65:
+        case 66: case 74: case 75: case 79: case 81: case 84: case 85: case 103:
+        case 104: case 106: case 108: case 109:
             return true;
         default:
             return false;
@@ -716,18 +706,27 @@ void RenderDebugPanelBatch() {
     BatchAddText(centerX, startY, buf, COLOR_YELLOW);
     startY += lineHeight;
     
-    snprintf(buf, sizeof(buf), "InGame:%c | Lobby:%c | Vote:%c | Spotlight:%c | Players:%d", 
+    snprintf(buf, sizeof(buf), "InGame:%c | Lobby:%c | Vote:%c | Spotlight:%c | Players:%d | Dead:%d", 
              isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', 
              isInVotingScreen ? 'Y' : 'N', isInSpotlightScreen ? 'Y' : 'N',
-             g_RenderPlayerCount);
+             g_RenderPlayerCount, g_DeadPlayersCount);
     BatchAddText(centerX, startY, buf, COLOR_CYAN);
     startY += lineHeight;
     
     RoleInfo myRole = GetRoleInfo(localPlayerRole);
-    snprintf(buf, sizeof(buf), "[ME] %s (ID:%d)", myRole.name, localPlayerRole);
+    snprintf(buf, sizeof(buf), "[ME] %s (ID:%d) | Tasks:%d | Infected:%c | Bomb:%c", 
+             myRole.name, localPlayerRole, g_LocalTasksRemaining,
+             g_LocalIsInfected ? 'Y' : 'N', g_LocalHasBomb ? 'Y' : 'N');
     BatchAddText(centerX, startY, buf, myRole.color);
-    startY += lineHeight + 8;
+    startY += lineHeight;
     
+    if (g_LocalKilledBy[0] != '\0') {
+        snprintf(buf, sizeof(buf), "Killed By: %s", g_LocalKilledBy);
+        BatchAddText(centerX, startY, buf, COLOR_RED);
+        startY += lineHeight;
+    }
+    
+    startY += 8;
     BatchAddText(centerX, startY, "--- PLAYER LIST ---", COLOR_YELLOW);
     startY += lineHeight;
     
@@ -737,7 +736,7 @@ void RenderDebugPanelBatch() {
         
         RoleInfo ri = GetRoleInfo(p->role);
         
-        char flags[16] = "";
+        char flags[20] = "";
         int fi = 0;
         if (p->isLocal) flags[fi++] = 'L';
         if (p->isGhost) flags[fi++] = 'G';
@@ -749,25 +748,34 @@ void RenderDebugPanelBatch() {
         if (p->isMorphed) flags[fi++] = 'M';
         if (p->isRunning) flags[fi++] = 'R';
         if (p->hasKilledThisRound) flags[fi++] = 'K';
+        if (p->isInfected) flags[fi++] = '*';
+        if (p->hasBomb) flags[fi++] = 'B';
         flags[fi] = '\0';
         if (fi == 0) strcpy(flags, "-");
         
-        snprintf(buf, sizeof(buf), "#%02d %-12s %s(%d) T%d %.0fm [%s]",
+        snprintf(buf, sizeof(buf), "#%02d %-12s %s(%d) T%d %.0fm Tsk:%d [%s]",
                  p->entityNumber,
                  p->name,
                  ri.name, p->role,
                  p->teamId,
                  p->distanceToLocal,
+                 p->tasksRemaining,
                  flags);
         
         int color = p->isLocal ? COLOR_CYAN : (p->isGhost ? COLOR_GRAY : ri.color);
         BatchAddText(centerX, startY, buf, color);
         startY += lineHeight;
+        
+        if (p->killedBy[0] != '\0') {
+            snprintf(buf, sizeof(buf), "   -> Killed by: %s", p->killedBy);
+            BatchAddText(centerX, startY, buf, COLOR_GRAY);
+            startY += lineHeight;
+        }
     }
     
     if (startY < maxY - lineHeight) {
         startY += 10;
-        BatchAddText(centerX, startY, "Flags: L=Local G=Ghost D=Down V=Vent I=Invis P=Pelican S=Spec M=Morph R=Run K=Kill", COLOR_GRAY);
+        BatchAddText(centerX, startY, "Flags: L=Local G=Ghost D=Down V=Vent I=Invis P=Pelican S=Spec M=Morph R=Run K=Kill *=Infected B=Bomb", COLOR_GRAY);
     }
 }
 
@@ -830,7 +838,23 @@ void RenderESPBatch() {
             }
             
             if (ESPName) {
-                BatchAddText(sx, boxY - 55, p->name, color);
+                float nameY = boxY - 55;
+                
+                int iconCount = 0;
+                if (p->isInfected) iconCount++;
+                if (p->hasBomb) iconCount++;
+                
+                float iconX = sx - 90 - (iconCount * 20);
+                
+                if (p->isInfected) {
+                    BatchAddIcon(iconX, nameY + 5, "\uF293", COLOR_LIME);
+                    iconX += 40;
+                }
+                if (p->hasBomb) {
+                    BatchAddIcon(iconX, nameY + 5, "\uF5FB", COLOR_ORANGE);
+                }
+                
+                BatchAddText(sx, nameY, p->name, color);
             }
         } 
         else if (ESPEdgeIndicator) {
@@ -838,6 +862,21 @@ void RenderESPBatch() {
             GetEdgePosition(sx, sy, &edgeX, &edgeY);
             
             BatchAddBox(edgeX - 8, edgeY - 8, 16, 16, color);
+            
+            int iconCount = 0;
+            if (p->isInfected) iconCount++;
+            if (p->hasBomb) iconCount++;
+            
+            float iconX = edgeX - 70 - (iconCount * 20);
+            float iconY = edgeY - 25;
+            
+            if (p->isInfected) {
+                BatchAddIcon(iconX, iconY, "\uF293", COLOR_LIME);
+                iconX += 40;
+            }
+            if (p->hasBomb) {
+                BatchAddIcon(iconX, iconY, "\uF5FB", COLOR_ORANGE);
+            }
             
             char et[64];
             snprintf(et, sizeof(et), "%s %.0fm", p->name, dist);
@@ -861,6 +900,11 @@ void ClearAllESP() {
     isInLobby = true;
     localPlayerInstance = NULL;
     localPlayerObject = NULL;
+    g_DeadPlayersCount = 0;
+    g_LocalTasksRemaining = 0;
+    g_LocalKilledBy[0] = '\0';
+    g_LocalIsInfected = false;
+    g_LocalHasBomb = false;
     
     ResetDroneViewDelay();
     
@@ -873,6 +917,8 @@ void ClearAllESP() {
         }
     }
 }
+
+int (*old_get_deadPlayersCount)() = NULL;
 
 void (*old_Update)(void *instance);
 void Update(void *instance) {
@@ -887,6 +933,15 @@ void Update(void *instance) {
             
             g_PlayerCount = 0;
             g_LocalPlayerPos = GetPlayerPosition(instance, true);
+            
+            g_LocalTasksRemaining = *(int*)((uintptr_t)instance + OFFSET_PE_TASKSREMAINING);
+            g_LocalIsInfected = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINFECTED);
+            g_LocalHasBomb = *(bool*)((uintptr_t)instance + OFFSET_PE_HASBOMB);
+            GetKilledBy(instance, g_LocalKilledBy, sizeof(g_LocalKilledBy));
+            
+            if (old_get_deadPlayersCount) {
+                g_DeadPlayersCount = old_get_deadPlayersCount();
+            }
             
             if (UnlimitedVision) {
                 *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
@@ -918,8 +973,7 @@ void Update(void *instance) {
             p->teamId = *(int*)((uintptr_t)instance + OFFSET_PE_TEAMID);
             p->entityNumber = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
             
-            // UTF-8 dönüşümü ile isim al (Türkçe karakter destekli)
-            WideCharToUTF8(instance, p->name, sizeof(p->name));
+            GetPlayerNickname(instance, p->name, sizeof(p->name));
             
             p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
             p->inVent = *(bool*)((uintptr_t)instance + OFFSET_PE_INVENT);
@@ -930,6 +984,10 @@ void Update(void *instance) {
             p->isRunning = *(bool*)((uintptr_t)instance + OFFSET_PE_ISRUNNING);
             p->hasKilledThisRound = *(bool*)((uintptr_t)instance + OFFSET_PE_HASKILLED);
             p->opacity = *(float*)((uintptr_t)instance + OFFSET_PE_TARGETOPACITY);
+            p->isInfected = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINFECTED);
+            p->hasBomb = *(bool*)((uintptr_t)instance + OFFSET_PE_HASBOMB);
+            p->tasksRemaining = *(int*)((uintptr_t)instance + OFFSET_PE_TASKSREMAINING);
+            GetKilledBy(instance, p->killedBy, sizeof(p->killedBy));
             
             if (!isLocal) {
                 float dx = p->position.x - g_LocalPlayerPos.x;
@@ -1045,51 +1103,44 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     InitESP(env);
     
     const char *features[] = {
-        //shared===================== VISION & COOLDOWN =====================//
-        OBFUSCATE("Category_[EYE]Vision & Cooldown"),
-        OBFUSCATE("Toggle_[EYE]Unlimited Vision"),
-        OBFUSCATE("Toggle_[TIMER]No Vent Cooldown"),
-        OBFUSCATE("Toggle_[GHOST]See Ghosts"),
+        OBFUSCATE("Category_[\uECB4]Vision & Cooldown"),
+        OBFUSCATE("Toggle_[\uECB4]Unlimited Vision"),
+        OBFUSCATE("Toggle_[\uF210]No Vent Cooldown"),
+        OBFUSCATE("Toggle_[\uEDB4]See Ghosts"),
         
-        //shared===================== CAMERA =====================//
-        OBFUSCATE("Category_[CAMERA]Camera"),
-        OBFUSCATE("Toggle_[ZOOM_IN]Drone View"),
-        OBFUSCATE("SeekBar_[SLIDER]Zoom Level_5_25"),
+        OBFUSCATE("Category_[\uF605]Camera"),
+        OBFUSCATE("Toggle_[\uF2DA]Drone View"),
+        OBFUSCATE("SeekBar_[\uF403]Zoom Level_5_25"),
         
-        //===================== ESP SETTINGS =====================//
-        OBFUSCATE("Category_[RADAR]ESP Settings"),
-        OBFUSCATE("Toggle_[RADAR]ESP Enabled"),
-        OBFUSCATE("Toggle_True_[TARGET]ESP Lines"),
-        OBFUSCATE("Toggle_True_[BOX]ESP Box"),
-        OBFUSCATE("Toggle_True_[MAP]ESP Distance"),
-        OBFUSCATE("Toggle_True_[USER]ESP Names"),
-        OBFUSCATE("Toggle_True_[COMPASS]Edge Indicator"),
-        OBFUSCATE("Toggle_True_[EYE_OFF]Hide in Vote Screen"),
-        OBFUSCATE("Toggle_[EYE_OFF]Hide in Lobby"),
+        OBFUSCATE("Category_[\uF04B]ESP Settings"),
+        OBFUSCATE("Toggle_[\uF04B]ESP Enabled"),
+        OBFUSCATE("Toggle_True_[\uF63A]ESP Lines"),
+        OBFUSCATE("Toggle_True_[\uEA36]ESP Box"),
+        OBFUSCATE("Toggle_True_[\uEF05]ESP Distance"),
+        OBFUSCATE("Toggle_True_[\uF25F]ESP Names"),
+        OBFUSCATE("Toggle_True_[\uEBBD]Edge Indicator"),
+        OBFUSCATE("Toggle_True_[\uECB2]Hide in Vote Screen"),
+        OBFUSCATE("Toggle_[\uECB2]Hide in Lobby"),
         
-        //===================== TELEPORT =====================//
-        OBFUSCATE("Category_[LOCATION]Teleport"),
-        OBFUSCATE("InputValue_999_[MAP]Teleport X"),
-        OBFUSCATE("InputValue_999_[MAP]Teleport Y"),
-        OBFUSCATE("Button_[SAVE]Set Current Position"),
-        OBFUSCATE("Button_[ROCKET]Teleport Now"),
+        OBFUSCATE("Category_[\uEF13]Teleport"),
+        OBFUSCATE("InputValue_999_[\uEF05]Teleport X"),
+        OBFUSCATE("InputValue_999_[\uEF05]Teleport Y"),
+        OBFUSCATE("Button_[\uF0B2]Set Current Position"),
+        OBFUSCATE("Button_[\uF093]Teleport Now"),
         
-        //===================== DEBUG =====================//
-        OBFUSCATE("Category_[BUG]Debug Panel"),
-        OBFUSCATE("Toggle_[TERMINAL]Show Debug Info"),
+        OBFUSCATE("Category_[\uEB06]Debug Panel"),
+        OBFUSCATE("Toggle_[\uF1F5]Show Debug Info"),
         
-        //===================== EXPERIMENTAL =====================//
-        OBFUSCATE("Category_[FLASH]Experimental [May Not Work]"),
-        OBFUSCATE("Toggle_[SHIELD]Anti-Death [LOCAL]"),
-        OBFUSCATE("Toggle_[SPEED]Speed Boost [LOCAL]"),
-        OBFUSCATE("SeekBar_[SLIDER]Speed Multiplier_10_40"),
+        OBFUSCATE("Category_[\uED3D]Experimental [May Not Work]"),
+        OBFUSCATE("Toggle_[\uF103]Anti-Death [LOCAL]"),
+        OBFUSCATE("Toggle_[\uEC11]Speed Boost [LOCAL]"),
+        OBFUSCATE("SeekBar_[\uF403]Speed Multiplier_10_40"),
         
-        //===================== ABOUT =====================//
-        OBFUSCATE("Category_[INFO]About"),
-        OBFUSCATE("RichTextView_[STAR]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
-        OBFUSCATE("ButtonLink_[YOUTUBE]YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
-        OBFUSCATE("ButtonLink_[GITHUB]Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
-        OBFUSCATE("ButtonLink_[LINK]GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
+        OBFUSCATE("Category_[\uF447]About"),
+        OBFUSCATE("RichTextView_[\uF185]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
+        OBFUSCATE("ButtonLink_[\uF2D4]YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
+        OBFUSCATE("ButtonLink_[\uEDCA]Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
+        OBFUSCATE("ButtonLink_[\uEEAF]GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
     };
 
     int count = sizeof(features) / sizeof(features[0]);
@@ -1110,42 +1161,27 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
             if (!boolean && localPlayerInstance) 
                 *(bool*)((uintptr_t)localPlayerInstance + OFFSET_PE_FOGOFWAR) = true;
             break;
-            
-        case 1:
-            NoCooldown = boolean;
-            break;
-            
+        case 1: NoCooldown = boolean; break;
         case 2:
             SeeGhosts = boolean;
             if (!boolean && localPlayerObject && SetCanSeeGhosts)
                 SetCanSeeGhosts(localPlayerObject, false);
             break;
-            
         case 3:
             DroneView = boolean;
-            if (!boolean) {
-                DisableDroneView();
-            } else {
-                ResetDroneViewDelay();
-            }
+            if (!boolean) DisableDroneView();
+            else ResetDroneViewDelay();
             break;
-            
         case 4:
             DroneZoom = (float)value;
-            if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize) {
+            if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize)
                 OverrideOrthographicSize(localPlayerObject, DroneZoom);
-            }
             break;
-            
         case 5:
             ESPEnabled = boolean;
-            if (boolean) {
-                g_ESPStabilized = false;
-                g_FrameCount = 0;
-            }
+            if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; }
             SetESPEnabled(boolean || DebugMode);
             break;
-            
         case 6: ESPLines = boolean; break;
         case 7: ESPBox = boolean; break;
         case 8: ESPDistance = boolean; break;
@@ -1153,39 +1189,17 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 10: ESPEdgeIndicator = boolean; break;
         case 11: ESPHideInVote = boolean; break;
         case 12: ESPHideInLobby = boolean; break;
-        
-        case 13:
-            TeleportX = (float)value;
-            break;
-            
-        case 14:
-            TeleportY = (float)value;
-            break;
-            
-        case 15:
-            btnSetPosition = true;
-            break;
-            
-        case 16:
-            btnTeleport = true;
-            break;
-        
+        case 13: TeleportX = (float)value; break;
+        case 14: TeleportY = (float)value; break;
+        case 15: btnSetPosition = true; break;
+        case 16: btnTeleport = true; break;
         case 17:
             DebugMode = boolean;
             SetESPEnabled(boolean || ESPEnabled);
             break;
-            
-        case 18:
-            AntiDeath = boolean;
-            break;
-            
-        case 19:
-            SpeedHack = boolean;
-            break;
-            
-        case 20:
-            SpeedMultiplier = (float)value / 10.0f;
-            break;
+        case 18: AntiDeath = boolean; break;
+        case 19: SpeedHack = boolean; break;
+        case 20: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -1202,13 +1216,13 @@ void hack_thread() {
     LOGI("%s loaded", (const char*)targetLibName);
 
 #if defined(__aarch64__)
-    // PlayableEntity hooks - RVA from dump.cs
+    // PlayableEntity hooks - RVA from dump.cs (TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC28D8")), Update, old_Update);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC368C")), LateUpdate, old_LateUpdate);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCE370")), TurnIntoGhost, old_TurnIntoGhost);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC5328")), Despawn, old_Despawn);
     
-    // LocalPlayer hooks - RVA from dump.cs
+    // LocalPlayer hooks - RVA from dump.cs (TypeDefIndex: 6261)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D986B8")), LocalPlayer_Update, old_LocalPlayer_Update);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA7768")), GetPlayerSpeed, old_GetPlayerSpeed);
     
@@ -1221,7 +1235,7 @@ void hack_thread() {
     // LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C
     SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DAF83C")));
     
-    // GGDRole hooks - RVA from dump.cs
+    // GGDRole hooks - RVA from dump.cs (TypeDefIndex: 5656)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55C94")), OnEnterVent, old_OnEnterVent);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55D88")), OnExitVent, old_OnExitVent);
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C548AC")), SetVentCooldown, old_SetVentCooldown);
