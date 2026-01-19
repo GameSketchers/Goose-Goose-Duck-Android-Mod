@@ -10,6 +10,7 @@
 #include <iostream>
 #include <dlfcn.h>
 #include <cmath>
+#include <chrono>
 #include "Includes/Logger.h"
 #include "Includes/obfuscate.h"
 #include "Includes/Utils.hpp"
@@ -23,6 +24,7 @@ bool AntiDeath = false;
 bool UnlimitedVision = false;
 bool NoCooldown = false;
 bool SeeGhosts = false;
+bool RemoveRoof = false;
 bool ESPEnabled = false;
 bool ESPLines = true;
 bool ESPBox = true;
@@ -33,7 +35,7 @@ bool ESPHideInVote = true;
 bool ESPHideInLobby = false;
 bool DebugMode = false;
 bool DroneView = false;
-float DroneZoom = 10.0f;
+float DroneZoom = 5.0f;
 bool SpeedHack = false;
 float SpeedMultiplier = 1.5f;
 
@@ -43,6 +45,13 @@ float SavedPosX = 0.0f;
 float SavedPosY = 0.0f;
 bool btnTeleport = false;
 bool btnSetPosition = false;
+
+bool AutoTaskComplete = false;
+bool btnCallEmergency = false;
+void* g_TasksHandler = NULL;
+void* g_RoofHandler = NULL;
+bool g_RoofRemovedThisRound = false;
+std::chrono::steady_clock::time_point g_LastAutoTaskTime;
 
 void *localPlayerInstance = NULL;
 void *localPlayerObject = NULL;
@@ -56,6 +65,7 @@ int localPlayerRole = 0;
 int g_DroneViewDelay = 0;
 #define DRONE_VIEW_DELAY_FRAMES 60
 bool g_DroneViewReady = false;
+bool g_DroneViewInitialized = false;
 
 float g_CameraOrthoSize = 5.0f;
 
@@ -78,7 +88,7 @@ struct Vector3 { float x, y, z; };
 #define COLOR_CRIMSON  0xFFDC143C
 #define COLOR_TEAL     0xFF008080
 
-// PlayableEntity (TypeDefIndex: 6285) - Handlers.GameHandlers.PlayerHandlers
+// PlayableEntity (TypeDefIndex: 6285)
 #define OFFSET_PE_NICKNAME           0x90
 #define OFFSET_PE_ISLOCAL            0x98
 #define OFFSET_PE_PLAYERROLE         0xA0
@@ -105,19 +115,26 @@ struct Vector3 { float x, y, z; };
 // PlayableEntity Static Fields
 #define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
 
-// GGDRole (TypeDefIndex: 5656) - Objects.PlayerRoles
+// GGDRole (TypeDefIndex: 5656)
 #define OFFSET_ROLE_TYPE             0x12
 
-// BetterPhotonTransformView - Position data
+// BetterPhotonTransformView
 #define OFFSET_TV_LATESTPOS          0x30
 #define OFFSET_TV_LASTTRANSFORMPOS   0x38
 
-// LocalPlayer (TypeDefIndex: 6261) - Handlers.GameHandlers.PlayerHandlers
+// LocalPlayer (TypeDefIndex: 6261)
 #define OFFSET_LP_MAINCAMERA                0x78
 #define OFFSET_LP_INVOTINGSCREEN            0xC3
 #define OFFSET_LP_INVOTINGTRANSITION        0xC4
 #define OFFSET_LP_INGAMESTARTSPOTLIGHT      0xC5
 #define OFFSET_LP_INGAMEENDSPOTLIGHT        0xC6
+
+// TasksHandler (TypeDefIndex: 6235)
+#define OFFSET_TH_SORTEDASSIGNEDTASKS     0x38
+
+// GameTask (TypeDefIndex: 5574)
+#define OFFSET_GT_TASKID                  0x10
+#define OFFSET_GT_ISFAKETASK              0xD1
 
 struct PlayerData {
     Vector2 position;
@@ -225,9 +242,29 @@ jmethodID g_GetScreenWidthMethod = NULL;
 jmethodID g_GetScreenHeightMethod = NULL;
 bool g_ESPReady = false;
 
+// LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (dump.cs TypeDefIndex: 6261)
 void (*OverrideOrthographicSize)(void*, float) = NULL;
+
+// PlayableEntity.TeleportTo - RVA: 0x3DD33EC (dump.cs TypeDefIndex: 6285)
 void (*TeleportTo)(void*, Vector2, bool) = NULL;
+
+// LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (dump.cs TypeDefIndex: 6261)
 void (*SetCanSeeGhosts)(void*, bool) = NULL;
+
+// TasksHandler.CompleteTask - RVA: 0x3D889C4 (dump.cs TypeDefIndex: 6235)
+void (*TasksHandler_CompleteTask)(void* instance, void* id, bool remote, bool silent, bool isUnassign, bool disableAnim) = NULL;
+
+// TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (dump.cs TypeDefIndex: 6235)
+void (*TasksHandler_UpdateTaskVisuals)(void* instance) = NULL;
+
+// RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (dump.cs TypeDefIndex: 6100)
+void (*RoofHandler_DeactivateRoofs)(void* instance, bool status) = NULL;
+
+// PlayerController.CallEmergency - RVA: 0x3DE40FC (dump.cs TypeDefIndex: 6283)
+void (*PlayerController_CallEmergency)(void* instance) = NULL;
+
+typedef void* (*il2cpp_string_new_t)(const char*);
+il2cpp_string_new_t il2cpp_string_new_func = NULL;
 
 JNIEnv* GetJNIEnv() {
     if (!g_JavaVM) return NULL;
@@ -298,6 +335,10 @@ void GetPlayerNickname(void* instance, char* outName, int maxLen) {
 
 void GetKilledBy(void* instance, char* outName, int maxLen) {
     WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen);
+}
+
+void GetTaskId(void* task, char* outId, int maxLen) {
+    WideCharToUTF8(task, OFFSET_GT_TASKID, outId, maxLen);
 }
 
 int GetRoleType(void* instance) {
@@ -516,14 +557,20 @@ void ApplyDroneViewDelayed() {
             return;
         }
         
-        g_DroneViewReady = true;
-        OverrideOrthographicSize(localPlayerObject, DroneZoom);
+        if (!g_DroneViewInitialized) {
+            g_DroneViewInitialized = true;
+            g_DroneViewReady = true;
+            OverrideOrthographicSize(localPlayerObject, DroneZoom);
+        } else if (g_DroneViewReady) {
+            OverrideOrthographicSize(localPlayerObject, DroneZoom);
+        }
     }
 }
 
 void ResetDroneViewDelay() {
     g_DroneViewDelay = 0;
     g_DroneViewReady = false;
+    g_DroneViewInitialized = false;
     g_ESPStabilized = false;
     g_FrameCount = 0;
 }
@@ -533,6 +580,7 @@ void DisableDroneView() {
         OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
     }
     g_DroneViewReady = false;
+    g_DroneViewInitialized = false;
     g_DroneViewDelay = 0;
     g_ESPStabilized = false;
     g_FrameCount = 0;
@@ -670,6 +718,53 @@ inline void GetEdgePosition(float sx, float sy, float* edgeX, float* edgeY) {
     if (*edgeY < minY) *edgeY = minY; else if (*edgeY > maxY) *edgeY = maxY;
 }
 
+void AutoCompleteAllTasks() {
+    if (!g_TasksHandler || !TasksHandler_CompleteTask || !il2cpp_string_new_func) return;
+    
+    void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
+    if (!taskList) return;
+    
+    void* items = *(void**)((uintptr_t)taskList + 0x10);
+    int count = *(int*)((uintptr_t)taskList + 0x18);
+    if (!items || count <= 0) return;
+    
+    bool anyCompleted = false;
+    
+    for (int i = 0; i < count; i++) {
+        void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
+        if (!task) continue;
+        
+        bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
+        if (isFake) continue;
+        
+        char taskId[64];
+        GetTaskId(task, taskId, sizeof(taskId));
+        if (taskId[0] == '\0') continue;
+        
+        void* taskIdStr = il2cpp_string_new_func(taskId);
+        if (taskIdStr) {
+            TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
+            anyCompleted = true;
+        }
+    }
+    
+    if (anyCompleted && TasksHandler_UpdateTaskVisuals) {
+        TasksHandler_UpdateTaskVisuals(g_TasksHandler);
+    }
+}
+
+void CheckAutoTask() {
+    if (!AutoTaskComplete || !g_TasksHandler || !isInGame || isInLobby) return;
+    
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_LastAutoTaskTime).count();
+    
+    if (elapsed >= 100) {
+        AutoCompleteAllTasks();
+        g_LastAutoTaskTime = now;
+    }
+}
+
 void RenderDebugPanelBatch() {
     if (!DebugMode) return;
     
@@ -693,9 +788,10 @@ void RenderDebugPanelBatch() {
     BatchAddText(centerX, startY, buf, COLOR_CYAN);
     startY += lineHeight;
     
-    snprintf(buf, sizeof(buf), "Drone:%c | Ready:%c | Delay:%d/%d | Zoom:%.1f", 
+    snprintf(buf, sizeof(buf), "Drone:%c | Ready:%c | Init:%c | Delay:%d/%d | Zoom:%.1f", 
              DroneView ? 'Y' : 'N', 
              g_DroneViewReady ? 'Y' : 'N',
+             g_DroneViewInitialized ? 'Y' : 'N',
              g_DroneViewDelay, DRONE_VIEW_DELAY_FRAMES,
              DroneZoom);
     BatchAddText(centerX, startY, buf, COLOR_CYAN);
@@ -725,6 +821,14 @@ void RenderDebugPanelBatch() {
         BatchAddText(centerX, startY, buf, COLOR_RED);
         startY += lineHeight;
     }
+    
+    snprintf(buf, sizeof(buf), "TasksHandler:%c | RoofHandler:%c | AutoTask:%c | RemoveRoof:%c",
+             g_TasksHandler ? 'Y' : 'N',
+             g_RoofHandler ? 'Y' : 'N',
+             AutoTaskComplete ? 'Y' : 'N',
+             RemoveRoof ? 'Y' : 'N');
+    BatchAddText(centerX, startY, buf, COLOR_ORANGE);
+    startY += lineHeight;
     
     startY += 8;
     BatchAddText(centerX, startY, "--- PLAYER LIST ---", COLOR_YELLOW);
@@ -905,6 +1009,7 @@ void ClearAllESP() {
     g_LocalKilledBy[0] = '\0';
     g_LocalIsInfected = false;
     g_LocalHasBomb = false;
+    g_RoofRemovedThisRound = false;
     
     ResetDroneViewDelay();
     
@@ -920,6 +1025,7 @@ void ClearAllESP() {
 
 int (*old_get_deadPlayersCount)() = NULL;
 
+// PlayableEntity.Update - RVA: 0x3DC28D8 (dump.cs TypeDefIndex: 6285)
 void (*old_Update)(void *instance);
 void Update(void *instance) {
     if (instance) {
@@ -962,6 +1068,14 @@ void Update(void *instance) {
                 btnTeleport = false;
                 LOGI("Teleported to: %.2f, %.2f", TeleportX, TeleportY);
             }
+            
+            if (btnCallEmergency && PlayerController_CallEmergency) {
+                PlayerController_CallEmergency(instance);
+                btnCallEmergency = false;
+                LOGI("Emergency called");
+            }
+            
+            CheckAutoTask();
         }
         
         if ((ESPEnabled || DebugMode) && g_PlayerCount < MAX_PLAYERS) {
@@ -1004,6 +1118,7 @@ void Update(void *instance) {
     old_Update(instance);
 }
 
+// PlayableEntity.LateUpdate - RVA: 0x3DC368C (dump.cs TypeDefIndex: 6285)
 void (*old_LateUpdate)(void *instance);
 void LateUpdate(void *instance) {
     old_LateUpdate(instance);
@@ -1036,14 +1151,18 @@ void LateUpdate(void *instance) {
     }
 }
 
+// PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (dump.cs TypeDefIndex: 6285)
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
 void TurnIntoGhost(void *instance, int deathReason) {
     if (AntiDeath && instance == localPlayerInstance) return;
     old_TurnIntoGhost(instance, deathReason);
 }
 
+// LocalPlayer.Update - RVA: 0x3D986B8 (dump.cs TypeDefIndex: 6261)
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
+    old_LocalPlayer_Update(instance);
+    
     if (instance) {
         localPlayerObject = instance;
         
@@ -1066,30 +1185,34 @@ void LocalPlayer_Update(void *instance) {
             ApplyDroneViewDelayed();
         }
     }
-    old_LocalPlayer_Update(instance);
 }
 
+// LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (dump.cs TypeDefIndex: 6261)
 float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
     float speed = old_GetPlayerSpeed(instance);
     return SpeedHack ? speed * SpeedMultiplier : speed;
 }
 
+// GGDRole.OnEnterVent - RVA: 0x3C55C94 (dump.cs TypeDefIndex: 5656)
 void (*old_OnEnterVent)(void *instance, void* vent, bool setCooldown);
 void OnEnterVent(void *instance, void* vent, bool setCooldown) {
     old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown);
 }
 
+// GGDRole.OnExitVent - RVA: 0x3C55D88 (dump.cs TypeDefIndex: 5656)
 void (*old_OnExitVent)(void *instance, void* vent, bool setCooldown);
 void OnExitVent(void *instance, void* vent, bool setCooldown) {
     old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown);
 }
 
+// GGDRole.SetVentCooldown - RVA: 0x3C548AC (dump.cs TypeDefIndex: 5656)
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) {
     old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown);
 }
 
+// PlayableEntity.Despawn - RVA: 0x3DC5328 (dump.cs TypeDefIndex: 6285)
 void (*old_Despawn)(void *instance);
 void Despawn(void *instance) {
     if (instance) {
@@ -1099,12 +1222,63 @@ void Despawn(void *instance) {
     old_Despawn(instance);
 }
 
+// TasksHandler.OnEnable - RVA: 0x3D8CC74 (dump.cs TypeDefIndex: 6235)
+void (*old_TasksHandler_OnEnable)(void* instance);
+void TasksHandler_OnEnable(void* instance) {
+    if (instance) {
+        g_TasksHandler = instance;
+    }
+    old_TasksHandler_OnEnable(instance);
+}
+
+// TasksHandler.OnDisable - RVA: 0x3D8CD7C (dump.cs TypeDefIndex: 6235)
+void (*old_TasksHandler_OnDisable)(void* instance);
+void TasksHandler_OnDisable(void* instance) {
+    if (instance == g_TasksHandler) {
+        g_TasksHandler = NULL;
+    }
+    old_TasksHandler_OnDisable(instance);
+}
+
+// RoofHandler.Awake - RVA: 0x3D3767C (dump.cs TypeDefIndex: 6100)
+void (*old_RoofHandler_Awake)(void* instance);
+void RoofHandler_Awake(void* instance) {
+    if (instance) {
+        g_RoofHandler = instance;
+    }
+    old_RoofHandler_Awake(instance);
+}
+
+// RoofHandler.OnDestroy - RVA: 0x3D37780 (dump.cs TypeDefIndex: 6100)
+void (*old_RoofHandler_OnDestroy)(void* instance);
+void RoofHandler_OnDestroy(void* instance) {
+    if (instance == g_RoofHandler) {
+        g_RoofHandler = NULL;
+        g_RoofRemovedThisRound = false;
+    }
+    old_RoofHandler_OnDestroy(instance);
+}
+
+// LocalPlayer.StartRound - RVA: 0x3D9FD58 (dump.cs TypeDefIndex: 6261)
+void (*old_LocalPlayer_StartRound)(void* instance, bool isFirstRound);
+void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
+    g_RoofRemovedThisRound = false;
+    
+    if (RemoveRoof && g_RoofHandler && RoofHandler_DeactivateRoofs) {
+        RoofHandler_DeactivateRoofs(g_RoofHandler, true);
+        g_RoofRemovedThisRound = true;
+    }
+    
+    old_LocalPlayer_StartRound(instance, isFirstRound);
+}
+
 jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     InitESP(env);
     
     const char *features[] = {
         OBFUSCATE("Category_[\uECB4]Vision & Cooldown"),
         OBFUSCATE("Toggle_[\uECB4]Unlimited Vision"),
+        OBFUSCATE("Toggle_[\F577]Remove Roof"),
         OBFUSCATE("Toggle_[\uF210]No Vent Cooldown"),
         OBFUSCATE("Toggle_[\uEDB4]See Ghosts"),
         
@@ -1127,6 +1301,10 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
         OBFUSCATE("InputValue_999_[\uEF05]Teleport Y"),
         OBFUSCATE("Button_[\uF0B2]Set Current Position"),
         OBFUSCATE("Button_[\uF093]Teleport Now"),
+        
+        OBFUSCATE("Category_[\uEE34]Task & Emergency"),
+        OBFUSCATE("Toggle_[\uF216]Auto Complete Tasks"),
+        OBFUSCATE("Button_[\uEF93]Call Emergency"),
         
         OBFUSCATE("Category_[\uEB06]Debug Panel"),
         OBFUSCATE("Toggle_[\uF1F5]Show Debug Info"),
@@ -1161,45 +1339,62 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
             if (!boolean && localPlayerInstance) 
                 *(bool*)((uintptr_t)localPlayerInstance + OFFSET_PE_FOGOFWAR) = true;
             break;
-        case 1: NoCooldown = boolean; break;
-        case 2:
+        case 1:
+            RemoveRoof = boolean;
+            if (boolean && g_RoofHandler && RoofHandler_DeactivateRoofs && !g_RoofRemovedThisRound) {
+                RoofHandler_DeactivateRoofs(g_RoofHandler, true);
+                g_RoofRemovedThisRound = true;
+            } else if (!boolean && g_RoofHandler && RoofHandler_DeactivateRoofs) {
+                RoofHandler_DeactivateRoofs(g_RoofHandler, false);
+                g_RoofRemovedThisRound = false;
+            }
+            break;
+        case 2: NoCooldown = boolean; break;
+        case 3:
             SeeGhosts = boolean;
             if (!boolean && localPlayerObject && SetCanSeeGhosts)
                 SetCanSeeGhosts(localPlayerObject, false);
             break;
-        case 3:
+        case 4:
             DroneView = boolean;
             if (!boolean) DisableDroneView();
             else ResetDroneViewDelay();
             break;
-        case 4:
+        case 5:
             DroneZoom = (float)value;
             if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize)
                 OverrideOrthographicSize(localPlayerObject, DroneZoom);
             break;
-        case 5:
+        case 6:
             ESPEnabled = boolean;
             if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; }
             SetESPEnabled(boolean || DebugMode);
             break;
-        case 6: ESPLines = boolean; break;
-        case 7: ESPBox = boolean; break;
-        case 8: ESPDistance = boolean; break;
-        case 9: ESPName = boolean; break;
-        case 10: ESPEdgeIndicator = boolean; break;
-        case 11: ESPHideInVote = boolean; break;
-        case 12: ESPHideInLobby = boolean; break;
-        case 13: TeleportX = (float)value; break;
-        case 14: TeleportY = (float)value; break;
-        case 15: btnSetPosition = true; break;
-        case 16: btnTeleport = true; break;
-        case 17:
+        case 7: ESPLines = boolean; break;
+        case 8: ESPBox = boolean; break;
+        case 9: ESPDistance = boolean; break;
+        case 10: ESPName = boolean; break;
+        case 11: ESPEdgeIndicator = boolean; break;
+        case 12: ESPHideInVote = boolean; break;
+        case 13: ESPHideInLobby = boolean; break;
+        case 14: TeleportX = (float)value; break;
+        case 15: TeleportY = (float)value; break;
+        case 16: btnSetPosition = true; break;
+        case 17: btnTeleport = true; break;
+        case 18:
+            AutoTaskComplete = boolean;
+            if (boolean) g_LastAutoTaskTime = std::chrono::steady_clock::now();
+            break;
+        case 19:
+            btnCallEmergency = true;
+            break;
+        case 20:
             DebugMode = boolean;
             SetESPEnabled(boolean || ESPEnabled);
             break;
-        case 18: AntiDeath = boolean; break;
-        case 19: SpeedHack = boolean; break;
-        case 20: SpeedMultiplier = (float)value / 10.0f; break;
+        case 21: AntiDeath = boolean; break;
+        case 22: SpeedHack = boolean; break;
+        case 23: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -1214,31 +1409,76 @@ void hack_thread() {
     while (!g_il2cppELF.isValid());
 
     LOGI("%s loaded", (const char*)targetLibName);
+    
+    void* il2cppHandle = dlopen("libil2cpp.so", RTLD_NOW);
+    if (il2cppHandle) {
+        il2cpp_string_new_func = (il2cpp_string_new_t)dlsym(il2cppHandle, "il2cpp_string_new");
+        LOGI("il2cpp_string_new: %p", il2cpp_string_new_func);
+    }
 
 #if defined(__aarch64__)
-    // PlayableEntity hooks - RVA from dump.cs (TypeDefIndex: 6285)
+    // PlayableEntity.Update - RVA: 0x3DC28D8 (dump.cs TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC28D8")), Update, old_Update);
+    
+    // PlayableEntity.LateUpdate - RVA: 0x3DC368C (dump.cs TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC368C")), LateUpdate, old_LateUpdate);
+    
+    // PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (dump.cs TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCE370")), TurnIntoGhost, old_TurnIntoGhost);
+    
+    // PlayableEntity.Despawn - RVA: 0x3DC5328 (dump.cs TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC5328")), Despawn, old_Despawn);
     
-    // LocalPlayer hooks - RVA from dump.cs (TypeDefIndex: 6261)
+    // LocalPlayer.Update - RVA: 0x3D986B8 (dump.cs TypeDefIndex: 6261)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D986B8")), LocalPlayer_Update, old_LocalPlayer_Update);
+    
+    // LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (dump.cs TypeDefIndex: 6261)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA7768")), GetPlayerSpeed, old_GetPlayerSpeed);
     
-    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C
+    // LocalPlayer.StartRound - RVA: 0x3D9FD58 (dump.cs TypeDefIndex: 6261)
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D9FD58")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
+    
+    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (dump.cs TypeDefIndex: 6261)
     OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DA813C")));
     
-    // PlayableEntity.TeleportTo - RVA: 0x3DD33EC
+    // PlayableEntity.TeleportTo - RVA: 0x3DD33EC (dump.cs TypeDefIndex: 6285)
     TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DD33EC")));
     
-    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C
+    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (dump.cs TypeDefIndex: 6261)
     SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DAF83C")));
     
-    // GGDRole hooks - RVA from dump.cs (TypeDefIndex: 5656)
+    // GGDRole.OnEnterVent - RVA: 0x3C55C94 (dump.cs TypeDefIndex: 5656)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55C94")), OnEnterVent, old_OnEnterVent);
+    
+    // GGDRole.OnExitVent - RVA: 0x3C55D88 (dump.cs TypeDefIndex: 5656)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55D88")), OnExitVent, old_OnExitVent);
+    
+    // GGDRole.SetVentCooldown - RVA: 0x3C548AC (dump.cs TypeDefIndex: 5656)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C548AC")), SetVentCooldown, old_SetVentCooldown);
+    
+    // TasksHandler.OnEnable - RVA: 0x3D8CC74 (dump.cs TypeDefIndex: 6235)
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8CC74")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
+    
+    // TasksHandler.OnDisable - RVA: 0x3D8CD7C (dump.cs TypeDefIndex: 6235)
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8CD7C")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
+    
+    // TasksHandler.CompleteTask - RVA: 0x3D889C4 (dump.cs TypeDefIndex: 6235)
+    TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D889C4")));
+    
+    // TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (dump.cs TypeDefIndex: 6235)
+    TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D908DC")));
+    
+    // RoofHandler.Awake - RVA: 0x3D3767C (dump.cs TypeDefIndex: 6100)
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D3767C")), RoofHandler_Awake, old_RoofHandler_Awake);
+    
+    // RoofHandler.OnDestroy - RVA: 0x3D37780 (dump.cs TypeDefIndex: 6100)
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D37780")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
+    
+    // RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (dump.cs TypeDefIndex: 6100)
+    RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D3798C")));
+    
+    // PlayerController.CallEmergency - RVA: 0x3DE40FC (dump.cs TypeDefIndex: 6283)
+    PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DE40FC")));
     
     LOGI("All hooks installed!");
 #endif
