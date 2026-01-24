@@ -71,6 +71,7 @@ float g_CameraOrthoSize = 5.0f;
 
 struct Vector2 { float x, y; };
 struct Vector3 { float x, y, z; };
+struct Quaternion { float x, y, z, w; };
 
 #define COLOR_WHITE    0xFFFFFFFF
 #define COLOR_RED      0xFFFF0000
@@ -88,7 +89,23 @@ struct Vector3 { float x, y, z; };
 #define COLOR_CRIMSON  0xFFDC143C
 #define COLOR_TEAL     0xFF008080
 
-// PlayableEntity (TypeDefIndex: 6285)
+/*
+ * ============================================================================
+ * OFFSET KAYNAKLARI (dump.cs referansları)
+ * ============================================================================
+ * PlayableEntity (TypeDefIndex: 6285)
+ * LocalPlayer (TypeDefIndex: 6261)
+ * CinemachineStateDrivenCamera (TypeDefIndex: 20422)
+ * CameraState (TypeDefIndex: 20469)
+ * GGDRole (TypeDefIndex: 5656)
+ * TasksHandler (TypeDefIndex: 6235)
+ * GameTask (TypeDefIndex: 5574)
+ * RoofHandler (TypeDefIndex: 6100)
+ * PlayerController (TypeDefIndex: 6283)
+ * BetterPhotonTransformView (custom offset)
+ * ============================================================================
+ */
+
 #define OFFSET_PE_NICKNAME           0x90
 #define OFFSET_PE_ISLOCAL            0x98
 #define OFFSET_PE_PLAYERROLE         0xA0
@@ -112,29 +129,32 @@ struct Vector3 { float x, y, z; };
 #define OFFSET_PE_ISRUNNING          0x121
 #define OFFSET_PE_TRANSFORMVIEW      0x2C0
 
-// PlayableEntity Static Fields
 #define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
-
-// GGDRole (TypeDefIndex: 5656)
 #define OFFSET_ROLE_TYPE             0x12
 
-// BetterPhotonTransformView
 #define OFFSET_TV_LATESTPOS          0x30
 #define OFFSET_TV_LASTTRANSFORMPOS   0x38
 
-// LocalPlayer (TypeDefIndex: 6261)
 #define OFFSET_LP_MAINCAMERA                0x78
+#define OFFSET_LP_STATECAMERA               0x80
+#define OFFSET_LP_SCRIPTABLESTATE           0x88
 #define OFFSET_LP_INVOTINGSCREEN            0xC3
 #define OFFSET_LP_INVOTINGTRANSITION        0xC4
 #define OFFSET_LP_INGAMESTARTSPOTLIGHT      0xC5
 #define OFFSET_LP_INGAMEENDSPOTLIGHT        0xC6
 
-// TasksHandler (TypeDefIndex: 6235)
-#define OFFSET_TH_SORTEDASSIGNEDTASKS     0x38
+#define OFFSET_CSDC_STATE                   0x108
+#define OFFSET_CS_RAWPOSITION               0x4C
 
-// GameTask (TypeDefIndex: 5574)
+#define OFFSET_TH_SORTEDASSIGNEDTASKS     0x38
 #define OFFSET_GT_TASKID                  0x10
 #define OFFSET_GT_ISFAKETASK              0xD1
+
+struct PlayerInfo {
+    void* instance;
+    bool isLocal;
+    bool isValid;
+};
 
 struct PlayerData {
     Vector2 position;
@@ -145,7 +165,7 @@ struct PlayerData {
     int entityNumber;
     char name[128];
     bool isValid;
-    float distanceToLocal;
+    float distanceToCamera;
     bool isDowned;
     bool inVent;
     bool isInvisible;
@@ -162,12 +182,15 @@ struct PlayerData {
 };
 
 #define MAX_PLAYERS 20
-PlayerData g_Players[MAX_PLAYERS];
-int g_PlayerCount = 0;
-Vector2 g_LocalPlayerPos;
-
+PlayerInfo g_PlayerInstances[MAX_PLAYERS];
+int g_PlayerInstanceCount = 0;
 PlayerData g_RenderPlayers[MAX_PLAYERS];
 int g_RenderPlayerCount = 0;
+
+Vector2 g_LocalPlayerPos;
+Vector3 g_CameraPosition = {0, 0, 0};
+void* g_CinemachineCamera = nullptr;
+bool g_CameraPositionValid = false;
 
 int g_DeadPlayersCount = 0;
 int g_LocalTasksRemaining = 0;
@@ -187,8 +210,6 @@ bool g_ESPStabilized = false;
 char g_ESPBatchBuffer[MAX_ESP_BUFFER];
 int g_ESPBatchOffset = 0;
 
-void* g_PlayableEntityClass = NULL;
-
 inline void BatchClear() {
     g_ESPBatchOffset = 0;
     g_ESPBatchBuffer[0] = '\0';
@@ -196,41 +217,32 @@ inline void BatchClear() {
 
 inline void BatchAddLine(float x1, float y1, float x2, float y2, int color) {
     if (g_ESPBatchOffset >= MAX_ESP_BUFFER - 64) return;
-    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, 
-        MAX_ESP_BUFFER - g_ESPBatchOffset,
+    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
         "L%.0f,%.0f,%.0f,%.0f,%d;", x1, y1, x2, y2, color);
 }
 
 inline void BatchAddBox(float x, float y, float w, float h, int color) {
     if (g_ESPBatchOffset >= MAX_ESP_BUFFER - 64) return;
-    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset,
-        MAX_ESP_BUFFER - g_ESPBatchOffset,
+    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
         "B%.0f,%.0f,%.0f,%.0f,%d;", x, y, w, h, color);
 }
 
 inline void BatchAddText(float x, float y, const char* text, int color) {
     if (!text || g_ESPBatchOffset >= MAX_ESP_BUFFER - 256) return;
-    
     char safeText[128];
     int j = 0;
     for (int i = 0; text[i] && j < 126; i++) {
-        if (text[i] == ',' || text[i] == ';') {
-            safeText[j++] = ' ';
-        } else {
-            safeText[j++] = text[i];
-        }
+        if (text[i] == ',' || text[i] == ';') safeText[j++] = ' ';
+        else safeText[j++] = text[i];
     }
     safeText[j] = '\0';
-    
-    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset,
-        MAX_ESP_BUFFER - g_ESPBatchOffset,
+    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
         "T%.0f,%.0f,%s,%d;", x, y, safeText, color);
 }
 
 inline void BatchAddIcon(float x, float y, const char* icon, int color) {
     if (!icon || g_ESPBatchOffset >= MAX_ESP_BUFFER - 64) return;
-    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset,
-        MAX_ESP_BUFFER - g_ESPBatchOffset,
+    g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
         "I%.0f,%.0f,%s,%d;", x, y, icon, color);
 }
 
@@ -242,26 +254,27 @@ jmethodID g_GetScreenWidthMethod = NULL;
 jmethodID g_GetScreenHeightMethod = NULL;
 bool g_ESPReady = false;
 
-// LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (dump.cs TypeDefIndex: 6261)
+/*
+ * ============================================================================
+ * FUNCTION POINTER KAYNAKLARI
+ * ============================================================================
+ * LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (TypeDefIndex: 6261)
+ * LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (TypeDefIndex: 6261)
+ * PlayableEntity.TeleportTo - RVA: 0x3DD33EC (TypeDefIndex: 6285)
+ * TasksHandler.CompleteTask - RVA: 0x3D889C4 (TypeDefIndex: 6235)
+ * TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (TypeDefIndex: 6235)
+ * RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (TypeDefIndex: 6100)
+ * PlayerController.CallEmergency - RVA: 0x3DE40FC (TypeDefIndex: 6283)
+ * ============================================================================
+ */
+
 void (*OverrideOrthographicSize)(void*, float) = NULL;
-
-// PlayableEntity.TeleportTo - RVA: 0x3DD33EC (dump.cs TypeDefIndex: 6285)
 void (*TeleportTo)(void*, Vector2, bool) = NULL;
-
-// LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (dump.cs TypeDefIndex: 6261)
 void (*SetCanSeeGhosts)(void*, bool) = NULL;
-
-// TasksHandler.CompleteTask - RVA: 0x3D889C4 (dump.cs TypeDefIndex: 6235)
-void (*TasksHandler_CompleteTask)(void* instance, void* id, bool remote, bool silent, bool isUnassign, bool disableAnim) = NULL;
-
-// TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (dump.cs TypeDefIndex: 6235)
-void (*TasksHandler_UpdateTaskVisuals)(void* instance) = NULL;
-
-// RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (dump.cs TypeDefIndex: 6100)
-void (*RoofHandler_DeactivateRoofs)(void* instance, bool status) = NULL;
-
-// PlayerController.CallEmergency - RVA: 0x3DE40FC (dump.cs TypeDefIndex: 6283)
-void (*PlayerController_CallEmergency)(void* instance) = NULL;
+void (*TasksHandler_CompleteTask)(void*, void*, bool, bool, bool, bool) = NULL;
+void (*TasksHandler_UpdateTaskVisuals)(void*) = NULL;
+void (*RoofHandler_DeactivateRoofs)(void*, bool) = NULL;
+void (*PlayerController_CallEmergency)(void*) = NULL;
 
 typedef void* (*il2cpp_string_new_t)(const char*);
 il2cpp_string_new_t il2cpp_string_new_func = NULL;
@@ -275,35 +288,24 @@ JNIEnv* GetJNIEnv() {
     return env;
 }
 
+Vector2 GetCameraPosition2D() {
+    if (g_CameraPositionValid) return {g_CameraPosition.x, g_CameraPosition.y};
+    return g_LocalPlayerPos;
+}
+
 void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen) {
     memset(outName, 0, maxLen);
-    
     uintptr_t strPtr = *(uintptr_t*)((uintptr_t)instance + offset);
-    if (!strPtr) { 
-        strcpy(outName, ""); 
-        return; 
-    }
-    
+    if (!strPtr) { strcpy(outName, ""); return; }
     int length = *(int*)(strPtr + 0x10);
     uint16_t* chars = (uint16_t*)(strPtr + 0x14);
-    
-    if (length <= 0 || length > 50) { 
-        strcpy(outName, ""); 
-        return; 
-    }
-    
+    if (length <= 0 || length > 50) { strcpy(outName, ""); return; }
     int outIdx = 0;
     for (int i = 0; i < length && outIdx < maxLen - 4; i++) {
         uint16_t c = chars[i];
-        
-        if (c < 0x80) {
-            if (c >= 0x20) {
-                outName[outIdx++] = (char)c;
-            }
-        } else if (c < 0x800) {
-            outName[outIdx++] = (char)(0xC0 | (c >> 6));
-            outName[outIdx++] = (char)(0x80 | (c & 0x3F));
-        } else if (c >= 0xD800 && c <= 0xDBFF) {
+        if (c < 0x80) { if (c >= 0x20) outName[outIdx++] = (char)c; }
+        else if (c < 0x800) { outName[outIdx++] = (char)(0xC0 | (c >> 6)); outName[outIdx++] = (char)(0x80 | (c & 0x3F)); }
+        else if (c >= 0xD800 && c <= 0xDBFF) {
             if (i + 1 < length) {
                 uint16_t c2 = chars[i + 1];
                 if (c2 >= 0xDC00 && c2 <= 0xDFFF) {
@@ -315,31 +317,19 @@ void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen)
                     i++;
                 }
             }
-        } else if (c >= 0xDC00 && c <= 0xDFFF) {
-            continue;
-        } else {
-            outName[outIdx++] = (char)(0xE0 | (c >> 12));
-            outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F));
-            outName[outIdx++] = (char)(0x80 | (c & 0x3F));
-        }
+        } else if (c >= 0xDC00 && c <= 0xDFFF) { continue; }
+        else { outName[outIdx++] = (char)(0xE0 | (c >> 12)); outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F)); outName[outIdx++] = (char)(0x80 | (c & 0x3F)); }
     }
     outName[outIdx] = '\0';
 }
 
 void GetPlayerNickname(void* instance, char* outName, int maxLen) {
     WideCharToUTF8(instance, OFFSET_PE_NICKNAME, outName, maxLen);
-    if (outName[0] == '\0') {
-        strcpy(outName, "Player");
-    }
+    if (outName[0] == '\0') strcpy(outName, "Player");
 }
 
-void GetKilledBy(void* instance, char* outName, int maxLen) {
-    WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen);
-}
-
-void GetTaskId(void* task, char* outId, int maxLen) {
-    WideCharToUTF8(task, OFFSET_GT_TASKID, outId, maxLen);
-}
+void GetKilledBy(void* instance, char* outName, int maxLen) { WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen); }
+void GetTaskId(void* task, char* outId, int maxLen) { WideCharToUTF8(task, OFFSET_GT_TASKID, outId, maxLen); }
 
 int GetRoleType(void* instance) {
     if (!instance) return -1;
@@ -350,8 +340,7 @@ int GetRoleType(void* instance) {
 
 bool IsPlayerInLobby(void* instance) {
     if (!instance) return true;
-    bool isRoleSet = *(bool*)((uintptr_t)instance + OFFSET_PE_ISPLAYERROLESET);
-    return !isRoleSet;
+    return !*(bool*)((uintptr_t)instance + OFFSET_PE_ISPLAYERROLESET);
 }
 
 float GetCurrentOrthoSize() {
@@ -362,14 +351,11 @@ float GetCurrentOrthoSize() {
 Vector2 GetPlayerPosition(void* instance, bool forLocal) {
     Vector2 pos = {0, 0};
     if (!instance) return pos;
-    
     void* tv = *(void**)((uintptr_t)instance + OFFSET_PE_TRANSFORMVIEW);
     if (tv) {
         if (forLocal) {
             pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LASTTRANSFORMPOS);
-            if (pos.x == 0 && pos.y == 0) {
-                pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
-            }
+            if (pos.x == 0 && pos.y == 0) pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
         } else {
             pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
         }
@@ -400,148 +386,70 @@ bool IsKillerRole(int roleId) {
 
 RoleInfo GetRoleInfo(int roleId) {
     RoleInfo info;
-    
-    if (roleId == 57) {
-        info.name = "Pelican";
-        info.color = COLOR_GREEN;
-        return info;
-    }
-    
-    if (roleId == 16 || roleId == 40) {
-        info.name = (roleId == 16) ? "Vulture" : "DND Vulture";
-        info.color = COLOR_GREEN;
-        return info;
-    }
-    
-    if (roleId == 21) {
-        info.name = "Pigeon";
-        info.color = COLOR_ORANGE;
-        return info;
-    }
-    
-    if (roleId == 3 || roleId == 34) {
-        info.name = (roleId == 3) ? "Dodo" : "Dueling Dodo";
-        info.color = COLOR_YELLOW;
-        return info;
-    }
-    
-    if (roleId == 24 || roleId == 39) {
-        info.name = (roleId == 24) ? "Falcon" : "DND Falcon";
-        info.color = COLOR_ORANGE;
-        return info;
-    }
-    
+    if (roleId == 57) { info.name = "Pelican"; info.color = COLOR_GREEN; return info; }
+    if (roleId == 16 || roleId == 40) { info.name = (roleId == 16) ? "Vulture" : "DND Vulture"; info.color = COLOR_GREEN; return info; }
+    if (roleId == 21) { info.name = "Pigeon"; info.color = COLOR_ORANGE; return info; }
+    if (roleId == 3 || roleId == 34) { info.name = (roleId == 3) ? "Dodo" : "Dueling Dodo"; info.color = COLOR_YELLOW; return info; }
+    if (roleId == 24 || roleId == 39) { info.name = (roleId == 24) ? "Falcon" : "DND Falcon"; info.color = COLOR_ORANGE; return info; }
     if (IsKillerRole(roleId)) {
         switch(roleId) {
-            case 2: info.name = "Duck"; break;
-            case 9: info.name = "Cannibal"; break;
-            case 10: info.name = "Morphling"; break;
-            case 12: info.name = "Silencer"; break;
-            case 14: info.name = "Lover Duck"; break;
-            case 17: info.name = "Professional"; break;
-            case 18: info.name = "Spy"; break;
-            case 19: info.name = "Mimic"; break;
-            case 23: info.name = "Assassin"; break;
-            case 25: info.name = "Hitman"; break;
-            case 27: info.name = "Snitch"; break;
-            case 33: info.name = "Demolitionist"; break;
-            case 36: info.name = "GH Duck"; break;
-            case 38: info.name = "DND Duck"; break;
-            case 41: info.name = "DND Morphling"; break;
-            case 44: info.name = "Vampire"; break;
-            case 46: info.name = "Thrall"; break;
-            case 48: info.name = "Identity Thief"; break;
-            case 51: info.name = "Ninja"; break;
-            case 58: info.name = "TTE Thrall"; break;
-            case 59: info.name = "Mummy"; break;
-            case 60: info.name = "Serial Killer"; break;
-            case 62: info.name = "Warlock"; break;
-            case 65: info.name = "Esper Duck"; break;
-            case 66: info.name = "Stalker"; break;
-            case 74: info.name = "Crow"; break;
-            case 75: info.name = "Sin Eater"; break;
-            case 79: info.name = "TLC ID Thief"; break;
-            case 81: info.name = "TLC Camo Duck"; break;
-            case 84: info.name = "Carrier"; break;
-            case 85: info.name = "Parasite"; break;
-            case 103: info.name = "Looter"; break;
-            case 104: info.name = "Sniper"; break;
-            case 106: info.name = "Hawk"; break;
-            case 108: info.name = "Dr Turducken"; break;
-            case 109: info.name = "Monster"; break;
+            case 2: info.name = "Duck"; break; case 9: info.name = "Cannibal"; break;
+            case 10: info.name = "Morphling"; break; case 12: info.name = "Silencer"; break;
+            case 14: info.name = "Lover Duck"; break; case 17: info.name = "Professional"; break;
+            case 18: info.name = "Spy"; break; case 19: info.name = "Mimic"; break;
+            case 23: info.name = "Assassin"; break; case 25: info.name = "Hitman"; break;
+            case 27: info.name = "Snitch"; break; case 33: info.name = "Demolitionist"; break;
+            case 36: info.name = "GH Duck"; break; case 38: info.name = "DND Duck"; break;
+            case 41: info.name = "DND Morphling"; break; case 44: info.name = "Vampire"; break;
+            case 46: info.name = "Thrall"; break; case 48: info.name = "Identity Thief"; break;
+            case 51: info.name = "Ninja"; break; case 58: info.name = "TTE Thrall"; break;
+            case 59: info.name = "Mummy"; break; case 60: info.name = "Serial Killer"; break;
+            case 62: info.name = "Warlock"; break; case 65: info.name = "Esper Duck"; break;
+            case 66: info.name = "Stalker"; break; case 74: info.name = "Crow"; break;
+            case 75: info.name = "Sin Eater"; break; case 79: info.name = "TLC ID Thief"; break;
+            case 81: info.name = "TLC Camo Duck"; break; case 84: info.name = "Carrier"; break;
+            case 85: info.name = "Parasite"; break; case 103: info.name = "Looter"; break;
+            case 104: info.name = "Sniper"; break; case 106: info.name = "Hawk"; break;
+            case 108: info.name = "Dr Turducken"; break; case 109: info.name = "Monster"; break;
             default: info.name = "Killer"; break;
         }
         info.color = COLOR_RED;
         return info;
     }
-    
     switch(roleId) {
-        case 0: info.name = "None"; break;
-        case 1: info.name = "Goose"; break;
-        case 4: info.name = "Bounty"; break;
-        case 5: info.name = "Mechanic"; break;
-        case 6: info.name = "Technician"; break;
-        case 7: info.name = "Medium"; break;
-        case 8: info.name = "Vigilante"; break;
-        case 11: info.name = "Sheriff"; break;
-        case 13: info.name = "Canadian"; break;
-        case 15: info.name = "Lover Goose"; break;
-        case 20: info.name = "Detective"; break;
-        case 22: info.name = "Birdwatcher"; break;
-        case 26: info.name = "Bodyguard"; break;
-        case 28: info.name = "Politician"; break;
-        case 29: info.name = "Locksmith"; break;
-        case 30: info.name = "Mortician"; break;
-        case 31: info.name = "Celebrity"; break;
-        case 32: info.name = "Party Goose"; break;
-        case 35: info.name = "GH Goose"; break;
-        case 37: info.name = "GH Bounty"; break;
-        case 42: info.name = "FP Goose"; break;
-        case 43: info.name = "Explore Goose"; break;
-        case 45: info.name = "Peasant"; break;
-        case 47: info.name = "Spectator"; break;
-        case 49: info.name = "Adventurer"; break;
-        case 50: info.name = "Avenger"; break;
-        case 52: info.name = "Undertaker"; break;
-        case 53: info.name = "Snoop"; break;
-        case 54: info.name = "Esper"; break;
-        case 55: info.name = "Invisibility"; break;
-        case 56: info.name = "Astral"; break;
-        case 61: info.name = "Engineer"; break;
-        case 63: info.name = "Street Urchin"; break;
-        case 64: info.name = "Tracker"; break;
-        case 67: info.name = "Preacher"; break;
-        case 68: info.name = "Inquisitor"; break;
-        case 69: info.name = "Saint"; break;
-        case 70: info.name = "High Priest"; break;
-        case 71: info.name = "Demon Hunter"; break;
-        case 72: info.name = "Initiate"; break;
-        case 73: info.name = "Seamstress"; break;
-        case 76: info.name = "TF Goose"; break;
-        case 77: info.name = "Chicken"; break;
-        case 78: info.name = "TLC Bodyguard"; break;
-        case 80: info.name = "TLC Undertaker"; break;
-        case 82: info.name = "Cupid"; break;
-        case 83: info.name = "Survivalist"; break;
-        case 86: info.name = "Drone"; break;
-        case 87: info.name = "Scientist"; break;
-        case 88: info.name = "HNS Role"; break;
-        case 89: info.name = "Owl"; break;
-        case 90: info.name = "Spotter"; break;
-        case 91: info.name = "HNS Sniper"; break;
-        case 92: info.name = "Lobbyist"; break;
-        case 93: info.name = "Lost Duckling"; break;
-        case 94: info.name = "Fortune Teller"; break;
-        case 95: info.name = "Mime"; break;
-        case 96: info.name = "Raven"; break;
-        case 97: info.name = "Rabbit"; break;
-        case 98: info.name = "Lucid Dreamer"; break;
-        case 99: info.name = "Clown"; break;
-        case 100: info.name = "Soldier"; break;
-        case 101: info.name = "Coroner"; break;
-        case 102: info.name = "Sensor"; break;
-        case 105: info.name = "Delusional"; break;
-        case 107: info.name = "AI"; break;
+        case 0: info.name = "None"; break; case 1: info.name = "Goose"; break;
+        case 4: info.name = "Bounty"; break; case 5: info.name = "Mechanic"; break;
+        case 6: info.name = "Technician"; break; case 7: info.name = "Medium"; break;
+        case 8: info.name = "Vigilante"; break; case 11: info.name = "Sheriff"; break;
+        case 13: info.name = "Canadian"; break; case 15: info.name = "Lover Goose"; break;
+        case 20: info.name = "Detective"; break; case 22: info.name = "Birdwatcher"; break;
+        case 26: info.name = "Bodyguard"; break; case 28: info.name = "Politician"; break;
+        case 29: info.name = "Locksmith"; break; case 30: info.name = "Mortician"; break;
+        case 31: info.name = "Celebrity"; break; case 32: info.name = "Party Goose"; break;
+        case 35: info.name = "GH Goose"; break; case 37: info.name = "GH Bounty"; break;
+        case 42: info.name = "FP Goose"; break; case 43: info.name = "Explore Goose"; break;
+        case 45: info.name = "Peasant"; break; case 47: info.name = "Spectator"; break;
+        case 49: info.name = "Adventurer"; break; case 50: info.name = "Avenger"; break;
+        case 52: info.name = "Undertaker"; break; case 53: info.name = "Snoop"; break;
+        case 54: info.name = "Esper"; break; case 55: info.name = "Invisibility"; break;
+        case 56: info.name = "Astral"; break; case 61: info.name = "Engineer"; break;
+        case 63: info.name = "Street Urchin"; break; case 64: info.name = "Tracker"; break;
+        case 67: info.name = "Preacher"; break; case 68: info.name = "Inquisitor"; break;
+        case 69: info.name = "Saint"; break; case 70: info.name = "High Priest"; break;
+        case 71: info.name = "Demon Hunter"; break; case 72: info.name = "Initiate"; break;
+        case 73: info.name = "Seamstress"; break; case 76: info.name = "TF Goose"; break;
+        case 77: info.name = "Chicken"; break; case 78: info.name = "TLC Bodyguard"; break;
+        case 80: info.name = "TLC Undertaker"; break; case 82: info.name = "Cupid"; break;
+        case 83: info.name = "Survivalist"; break; case 86: info.name = "Drone"; break;
+        case 87: info.name = "Scientist"; break; case 88: info.name = "HNS Role"; break;
+        case 89: info.name = "Owl"; break; case 90: info.name = "Spotter"; break;
+        case 91: info.name = "HNS Sniper"; break; case 92: info.name = "Lobbyist"; break;
+        case 93: info.name = "Lost Duckling"; break; case 94: info.name = "Fortune Teller"; break;
+        case 95: info.name = "Mime"; break; case 96: info.name = "Raven"; break;
+        case 97: info.name = "Rabbit"; break; case 98: info.name = "Lucid Dreamer"; break;
+        case 99: info.name = "Clown"; break; case 100: info.name = "Soldier"; break;
+        case 101: info.name = "Coroner"; break; case 102: info.name = "Sensor"; break;
+        case 105: info.name = "Delusional"; break; case 107: info.name = "AI"; break;
         default: info.name = "Unknown"; break;
     }
     info.color = COLOR_WHITE;
@@ -550,333 +458,231 @@ RoleInfo GetRoleInfo(int roleId) {
 
 void ApplyDroneViewDelayed() {
     if (!localPlayerObject || !OverrideOrthographicSize) return;
-    
     if (DroneView) {
-        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) {
-            g_DroneViewDelay++;
-            return;
-        }
-        
-        if (!g_DroneViewInitialized) {
-            g_DroneViewInitialized = true;
-            g_DroneViewReady = true;
-            OverrideOrthographicSize(localPlayerObject, DroneZoom);
-        } else if (g_DroneViewReady) {
-            OverrideOrthographicSize(localPlayerObject, DroneZoom);
-        }
+        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) { g_DroneViewDelay++; return; }
+        if (!g_DroneViewInitialized) { g_DroneViewInitialized = true; g_DroneViewReady = true; OverrideOrthographicSize(localPlayerObject, DroneZoom); }
+        else if (g_DroneViewReady) { OverrideOrthographicSize(localPlayerObject, DroneZoom); }
     }
 }
 
-void ResetDroneViewDelay() {
-    g_DroneViewDelay = 0;
-    g_DroneViewReady = false;
-    g_DroneViewInitialized = false;
-    g_ESPStabilized = false;
-    g_FrameCount = 0;
-}
+void ResetDroneViewDelay() { g_DroneViewDelay = 0; g_DroneViewReady = false; g_DroneViewInitialized = false; g_ESPStabilized = false; g_FrameCount = 0; }
 
 void DisableDroneView() {
-    if (localPlayerObject && OverrideOrthographicSize) {
-        OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
-    }
-    g_DroneViewReady = false;
-    g_DroneViewInitialized = false;
-    g_DroneViewDelay = 0;
-    g_ESPStabilized = false;
-    g_FrameCount = 0;
+    if (localPlayerObject && OverrideOrthographicSize) OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
+    g_DroneViewReady = false; g_DroneViewInitialized = false; g_DroneViewDelay = 0; g_ESPStabilized = false; g_FrameCount = 0;
 }
 
 void InitESP(JNIEnv *env) {
     if (g_ESPReady) return;
     if (!env) return;
     if (!g_JavaVM) env->GetJavaVM(&g_JavaVM);
-    
     jclass cls = env->FindClass("com/android/support/Menu");
     if (!cls) return;
-    
     g_MenuClass = (jclass)env->NewGlobalRef(cls);
-    
     g_BatchDrawMethod = env->GetStaticMethodID(g_MenuClass, "batchDrawESP", "(Ljava/lang/String;)V");
     g_SetESPEnabledMethod = env->GetStaticMethodID(g_MenuClass, "setESPEnabled", "(Z)V");
     g_GetScreenWidthMethod = env->GetStaticMethodID(g_MenuClass, "getScreenWidth", "()I");
     g_GetScreenHeightMethod = env->GetStaticMethodID(g_MenuClass, "getScreenHeight", "()I");
-    
     g_ESPReady = (g_BatchDrawMethod != NULL);
     env->DeleteLocalRef(cls);
-    
     LOGI("ESP Init: %s", g_ESPReady ? "SUCCESS" : "FAILED");
 }
 
 void UpdateScreenSize() {
     JNIEnv* env = GetJNIEnv();
     if (!env || !g_MenuClass || !g_GetScreenWidthMethod) return;
-    
     int w = env->CallStaticIntMethod(g_MenuClass, g_GetScreenWidthMethod);
     int h = env->CallStaticIntMethod(g_MenuClass, g_GetScreenHeightMethod);
-    if (w > 100 && h > 100) {
-        g_ScreenWidth = (float)w;
-        g_ScreenHeight = (float)h;
-    }
+    if (w > 100 && h > 100) { g_ScreenWidth = (float)w; g_ScreenHeight = (float)h; }
 }
 
 void SetESPEnabled(bool e) {
     JNIEnv* env = GetJNIEnv();
-    if (env && g_SetESPEnabledMethod) 
-        env->CallStaticVoidMethod(g_MenuClass, g_SetESPEnabledMethod, (jboolean)e);
+    if (env && g_SetESPEnabledMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetESPEnabledMethod, (jboolean)e);
 }
 
 void SendBatchESP(JNIEnv* env) {
     if (!env || !g_BatchDrawMethod) return;
-    
     jstring jdata = env->NewStringUTF(g_ESPBatchBuffer);
-    if (jdata) {
-        env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, jdata);
-        env->DeleteLocalRef(jdata);
-    }
+    if (jdata) { env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, jdata); env->DeleteLocalRef(jdata); }
 }
 
-inline bool WorldToScreen(Vector2 world, Vector2 localPos, float scale, float* sx, float* sy) {
-    float dx = world.x - localPos.x;
-    float dy = world.y - localPos.y;
-    
+inline bool WorldToScreen(Vector2 world, Vector2 camPos, float scale, float* sx, float* sy) {
+    float dx = world.x - camPos.x;
+    float dy = world.y - camPos.y;
     float cx = g_ScreenWidth * 0.5f;
     float cy = g_ScreenHeight * 0.5f;
-    
     *sx = cx + (dx * scale);
     *sy = cy - (dy * scale);
-    
     return true;
 }
 
 bool ClipLine(float* x1, float* y1, float* x2, float* y2) {
-    const float xmin = 0, ymin = 0;
-    const float xmax = g_ScreenWidth, ymax = g_ScreenHeight;
-    
+    const float xmin = 0, ymin = 0, xmax = g_ScreenWidth, ymax = g_ScreenHeight;
     int outcode1 = 0, outcode2 = 0;
-    
-    if (*x1 < xmin) outcode1 |= 1;
-    else if (*x1 > xmax) outcode1 |= 2;
-    if (*y1 < ymin) outcode1 |= 8;
-    else if (*y1 > ymax) outcode1 |= 4;
-    
-    if (*x2 < xmin) outcode2 |= 1;
-    else if (*x2 > xmax) outcode2 |= 2;
-    if (*y2 < ymin) outcode2 |= 8;
-    else if (*y2 > ymax) outcode2 |= 4;
-    
+    if (*x1 < xmin) outcode1 |= 1; else if (*x1 > xmax) outcode1 |= 2;
+    if (*y1 < ymin) outcode1 |= 8; else if (*y1 > ymax) outcode1 |= 4;
+    if (*x2 < xmin) outcode2 |= 1; else if (*x2 > xmax) outcode2 |= 2;
+    if (*y2 < ymin) outcode2 |= 8; else if (*y2 > ymax) outcode2 |= 4;
     while (true) {
         if (!(outcode1 | outcode2)) return true;
         if (outcode1 & outcode2) return false;
-        
-        float x, y;
-        int outcodeOut = outcode1 ? outcode1 : outcode2;
-        
+        float x, y; int outcodeOut = outcode1 ? outcode1 : outcode2;
         if (outcodeOut & 4) { x = *x1 + (*x2 - *x1) * (ymax - *y1) / (*y2 - *y1); y = ymax; }
         else if (outcodeOut & 8) { x = *x1 + (*x2 - *x1) * (ymin - *y1) / (*y2 - *y1); y = ymin; }
         else if (outcodeOut & 2) { y = *y1 + (*y2 - *y1) * (xmax - *x1) / (*x2 - *x1); x = xmax; }
         else { y = *y1 + (*y2 - *y1) * (xmin - *x1) / (*x2 - *x1); x = xmin; }
-        
         if (outcodeOut == outcode1) {
-            *x1 = x; *y1 = y;
-            outcode1 = 0;
-            if (*x1 < xmin) outcode1 |= 1;
-            else if (*x1 > xmax) outcode1 |= 2;
-            if (*y1 < ymin) outcode1 |= 8;
-            else if (*y1 > ymax) outcode1 |= 4;
+            *x1 = x; *y1 = y; outcode1 = 0;
+            if (*x1 < xmin) outcode1 |= 1; else if (*x1 > xmax) outcode1 |= 2;
+            if (*y1 < ymin) outcode1 |= 8; else if (*y1 > ymax) outcode1 |= 4;
         } else {
-            *x2 = x; *y2 = y;
-            outcode2 = 0;
-            if (*x2 < xmin) outcode2 |= 1;
-            else if (*x2 > xmax) outcode2 |= 2;
-            if (*y2 < ymin) outcode2 |= 8;
-            else if (*y2 > ymax) outcode2 |= 4;
+            *x2 = x; *y2 = y; outcode2 = 0;
+            if (*x2 < xmin) outcode2 |= 1; else if (*x2 > xmax) outcode2 |= 2;
+            if (*y2 < ymin) outcode2 |= 8; else if (*y2 > ymax) outcode2 |= 4;
         }
     }
 }
 
 inline void GetEdgePosition(float sx, float sy, float* edgeX, float* edgeY) {
-    float cx = g_ScreenWidth * 0.5f;
-    float cy = g_ScreenHeight * 0.5f;
-    float dx = sx - cx;
-    float dy = sy - cy;
-    
+    float cx = g_ScreenWidth * 0.5f, cy = g_ScreenHeight * 0.5f;
+    float dx = sx - cx, dy = sy - cy;
     if (dx == 0 && dy == 0) { *edgeX = cx; *edgeY = cy; return; }
-    
-    float padding = 100.0f;
-    float maxX = g_ScreenWidth - padding, minX = padding;
-    float maxY = g_ScreenHeight - padding, minY = padding;
-    
+    float padding = 100.0f, maxX = g_ScreenWidth - padding, minX = padding, maxY = g_ScreenHeight - padding, minY = padding;
     float tX = (dx > 0) ? ((maxX - cx) / dx) : ((minX - cx) / dx);
     float tY = (dy > 0) ? ((maxY - cy) / dy) : ((minY - cy) / dy);
-    float t = fminf(fabsf(tX), fabsf(tY));
-    if (t > 1) t = 1;
-    
-    *edgeX = cx + dx * t;
-    *edgeY = cy + dy * t;
-    
+    float t = fminf(fabsf(tX), fabsf(tY)); if (t > 1) t = 1;
+    *edgeX = cx + dx * t; *edgeY = cy + dy * t;
     if (*edgeX < minX) *edgeX = minX; else if (*edgeX > maxX) *edgeX = maxX;
     if (*edgeY < minY) *edgeY = minY; else if (*edgeY > maxY) *edgeY = maxY;
 }
 
 void AutoCompleteAllTasks() {
     if (!g_TasksHandler || !TasksHandler_CompleteTask || !il2cpp_string_new_func) return;
-    
     void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
     if (!taskList) return;
-    
     void* items = *(void**)((uintptr_t)taskList + 0x10);
     int count = *(int*)((uintptr_t)taskList + 0x18);
     if (!items || count <= 0) return;
-    
     bool anyCompleted = false;
-    
     for (int i = 0; i < count; i++) {
         void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
         if (!task) continue;
-        
         bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
         if (isFake) continue;
-        
-        char taskId[64];
-        GetTaskId(task, taskId, sizeof(taskId));
+        char taskId[64]; GetTaskId(task, taskId, sizeof(taskId));
         if (taskId[0] == '\0') continue;
-        
         void* taskIdStr = il2cpp_string_new_func(taskId);
-        if (taskIdStr) {
-            TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-            anyCompleted = true;
-        }
+        if (taskIdStr) { TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false); anyCompleted = true; }
     }
-    
-    if (anyCompleted && TasksHandler_UpdateTaskVisuals) {
-        TasksHandler_UpdateTaskVisuals(g_TasksHandler);
-    }
+    if (anyCompleted && TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
 }
 
 void CheckAutoTask() {
     if (!AutoTaskComplete || !g_TasksHandler || !isInGame || isInLobby) return;
-    
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_LastAutoTaskTime).count();
-    
-    if (elapsed >= 100) {
-        AutoCompleteAllTasks();
-        g_LastAutoTaskTime = now;
-    }
+    if (elapsed >= 100) { AutoCompleteAllTasks(); g_LastAutoTaskTime = now; }
+}
+
+void CollectPlayerDataFromInstance(void* instance, PlayerData* p, Vector2 camPos) {
+    if (!instance || !p) return;
+    bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
+    p->position = GetPlayerPosition(instance, isLocal);
+    p->isGhost = *(bool*)((uintptr_t)instance + OFFSET_PE_ISGHOST);
+    p->isLocal = isLocal;
+    p->role = GetRoleType(instance);
+    p->teamId = *(int*)((uintptr_t)instance + OFFSET_PE_TEAMID);
+    p->entityNumber = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
+    GetPlayerNickname(instance, p->name, sizeof(p->name));
+    p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
+    p->inVent = *(bool*)((uintptr_t)instance + OFFSET_PE_INVENT);
+    p->isInvisible = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINVISIBLE);
+    p->isInPelican = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINPELICAN);
+    p->isSpectator = *(bool*)((uintptr_t)instance + OFFSET_PE_ISSPECTATOR);
+    p->isMorphed = *(bool*)((uintptr_t)instance + OFFSET_PE_ISMORPHED);
+    p->isRunning = *(bool*)((uintptr_t)instance + OFFSET_PE_ISRUNNING);
+    p->hasKilledThisRound = *(bool*)((uintptr_t)instance + OFFSET_PE_HASKILLED);
+    p->opacity = *(float*)((uintptr_t)instance + OFFSET_PE_TARGETOPACITY);
+    p->isInfected = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINFECTED);
+    p->hasBomb = *(bool*)((uintptr_t)instance + OFFSET_PE_HASBOMB);
+    p->tasksRemaining = *(int*)((uintptr_t)instance + OFFSET_PE_TASKSREMAINING);
+    GetKilledBy(instance, p->killedBy, sizeof(p->killedBy));
+    float dx = p->position.x - camPos.x;
+    float dy = p->position.y - camPos.y;
+    p->distanceToCamera = sqrtf(dx*dx + dy*dy);
+    p->isValid = true;
 }
 
 void RenderDebugPanelBatch() {
     if (!DebugMode) return;
-    
     float centerX = g_ScreenWidth * 0.5f;
     float startY = 100;
     float lineHeight = 28;
     float maxY = g_ScreenHeight - 80;
-    
+    char buf[256];
+
     BatchAddText(centerX, startY, "=== DEBUG INFO ===", COLOR_MAGENTA);
     startY += lineHeight + 5;
-    
-    char buf[256];
-    
-    snprintf(buf, sizeof(buf), "Screen:%.0fx%.0f | Ortho:%.1f | Scale:%.0f", 
-             g_ScreenWidth, g_ScreenHeight, GetCurrentOrthoSize(), GetESPScale());
-    BatchAddText(centerX, startY, buf, COLOR_CYAN);
-    startY += lineHeight;
-    
-    snprintf(buf, sizeof(buf), "MyPos: X=%.2f Y=%.2f", 
-             g_LocalPlayerPos.x, g_LocalPlayerPos.y);
-    BatchAddText(centerX, startY, buf, COLOR_CYAN);
-    startY += lineHeight;
-    
-    snprintf(buf, sizeof(buf), "Drone:%c | Ready:%c | Init:%c | Delay:%d/%d | Zoom:%.1f", 
-             DroneView ? 'Y' : 'N', 
-             g_DroneViewReady ? 'Y' : 'N',
-             g_DroneViewInitialized ? 'Y' : 'N',
-             g_DroneViewDelay, DRONE_VIEW_DELAY_FRAMES,
-             DroneZoom);
-    BatchAddText(centerX, startY, buf, COLOR_CYAN);
-    startY += lineHeight;
-    
-    snprintf(buf, sizeof(buf), "TP Target: X=%.0f Y=%.0f | Saved: X=%.1f Y=%.1f", 
-             TeleportX, TeleportY, SavedPosX, SavedPosY);
-    BatchAddText(centerX, startY, buf, COLOR_YELLOW);
-    startY += lineHeight;
-    
-    snprintf(buf, sizeof(buf), "InGame:%c | Lobby:%c | Vote:%c | Spotlight:%c | Players:%d | Dead:%d", 
-             isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', 
-             isInVotingScreen ? 'Y' : 'N', isInSpotlightScreen ? 'Y' : 'N',
-             g_RenderPlayerCount, g_DeadPlayersCount);
-    BatchAddText(centerX, startY, buf, COLOR_CYAN);
-    startY += lineHeight;
-    
+
+    snprintf(buf, sizeof(buf), "Screen:%.0fx%.0f | Ortho:%.1f | Scale:%.0f", g_ScreenWidth, g_ScreenHeight, GetCurrentOrthoSize(), GetESPScale());
+    BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
+
+    snprintf(buf, sizeof(buf), "PlayerPos: X=%.2f Y=%.2f", g_LocalPlayerPos.x, g_LocalPlayerPos.y);
+    BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
+
+    snprintf(buf, sizeof(buf), "CamPos: X=%.2f Y=%.2f Z=%.2f [%s]", g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z, g_CameraPositionValid ? "VALID" : "INVALID");
+    BatchAddText(centerX, startY, buf, g_CameraPositionValid ? COLOR_LIME : COLOR_RED); startY += lineHeight;
+
+    Vector2 usedPos = GetCameraPosition2D();
+    snprintf(buf, sizeof(buf), "ESP Using: X=%.2f Y=%.2f", usedPos.x, usedPos.y);
+    BatchAddText(centerX, startY, buf, COLOR_GOLD); startY += lineHeight;
+
+    snprintf(buf, sizeof(buf), "Drone:%c | Ready:%c | Init:%c | Delay:%d/%d | Zoom:%.1f", DroneView ? 'Y' : 'N', g_DroneViewReady ? 'Y' : 'N', g_DroneViewInitialized ? 'Y' : 'N', g_DroneViewDelay, DRONE_VIEW_DELAY_FRAMES, DroneZoom);
+    BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
+
+    snprintf(buf, sizeof(buf), "TP Target: X=%.0f Y=%.0f | Saved: X=%.1f Y=%.1f", TeleportX, TeleportY, SavedPosX, SavedPosY);
+    BatchAddText(centerX, startY, buf, COLOR_YELLOW); startY += lineHeight;
+
+    snprintf(buf, sizeof(buf), "InGame:%c | Lobby:%c | Vote:%c | Spotlight:%c | Players:%d | Dead:%d", isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', isInVotingScreen ? 'Y' : 'N', isInSpotlightScreen ? 'Y' : 'N', g_RenderPlayerCount, g_DeadPlayersCount);
+    BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
+
     RoleInfo myRole = GetRoleInfo(localPlayerRole);
-    snprintf(buf, sizeof(buf), "[ME] %s (ID:%d) | Tasks:%d | Infected:%c | Bomb:%c", 
-             myRole.name, localPlayerRole, g_LocalTasksRemaining,
-             g_LocalIsInfected ? 'Y' : 'N', g_LocalHasBomb ? 'Y' : 'N');
-    BatchAddText(centerX, startY, buf, myRole.color);
-    startY += lineHeight;
-    
+    snprintf(buf, sizeof(buf), "[ME] %s (ID:%d) | Tasks:%d | Infected:%c | Bomb:%c", myRole.name, localPlayerRole, g_LocalTasksRemaining, g_LocalIsInfected ? 'Y' : 'N', g_LocalHasBomb ? 'Y' : 'N');
+    BatchAddText(centerX, startY, buf, myRole.color); startY += lineHeight;
+
     if (g_LocalKilledBy[0] != '\0') {
         snprintf(buf, sizeof(buf), "Killed By: %s", g_LocalKilledBy);
-        BatchAddText(centerX, startY, buf, COLOR_RED);
-        startY += lineHeight;
+        BatchAddText(centerX, startY, buf, COLOR_RED); startY += lineHeight;
     }
-    
-    snprintf(buf, sizeof(buf), "TasksHandler:%c | RoofHandler:%c | AutoTask:%c | RemoveRoof:%c",
-             g_TasksHandler ? 'Y' : 'N',
-             g_RoofHandler ? 'Y' : 'N',
-             AutoTaskComplete ? 'Y' : 'N',
-             RemoveRoof ? 'Y' : 'N');
-    BatchAddText(centerX, startY, buf, COLOR_ORANGE);
-    startY += lineHeight;
-    
+
+    snprintf(buf, sizeof(buf), "TasksHandler:%c | RoofHandler:%c | AutoTask:%c | RemoveRoof:%c", g_TasksHandler ? 'Y' : 'N', g_RoofHandler ? 'Y' : 'N', AutoTaskComplete ? 'Y' : 'N', RemoveRoof ? 'Y' : 'N');
+    BatchAddText(centerX, startY, buf, COLOR_ORANGE); startY += lineHeight;
+
     startY += 8;
-    BatchAddText(centerX, startY, "--- PLAYER LIST ---", COLOR_YELLOW);
-    startY += lineHeight;
-    
+    BatchAddText(centerX, startY, "--- PLAYER LIST ---", COLOR_YELLOW); startY += lineHeight;
+
     for (int i = 0; i < g_RenderPlayerCount && startY < maxY; i++) {
         PlayerData* p = &g_RenderPlayers[i];
         if (!p->isValid) continue;
-        
         RoleInfo ri = GetRoleInfo(p->role);
-        
-        char flags[20] = "";
-        int fi = 0;
-        if (p->isLocal) flags[fi++] = 'L';
-        if (p->isGhost) flags[fi++] = 'G';
-        if (p->isDowned) flags[fi++] = 'D';
-        if (p->inVent) flags[fi++] = 'V';
-        if (p->isInvisible) flags[fi++] = 'I';
-        if (p->isInPelican) flags[fi++] = 'P';
-        if (p->isSpectator) flags[fi++] = 'S';
-        if (p->isMorphed) flags[fi++] = 'M';
-        if (p->isRunning) flags[fi++] = 'R';
-        if (p->hasKilledThisRound) flags[fi++] = 'K';
-        if (p->isInfected) flags[fi++] = '*';
-        if (p->hasBomb) flags[fi++] = 'B';
-        flags[fi] = '\0';
-        if (fi == 0) strcpy(flags, "-");
-        
-        snprintf(buf, sizeof(buf), "#%02d %-12s %s(%d) T%d %.0fm Tsk:%d [%s]",
-                 p->entityNumber,
-                 p->name,
-                 ri.name, p->role,
-                 p->teamId,
-                 p->distanceToLocal,
-                 p->tasksRemaining,
-                 flags);
-        
+        char flags[20] = ""; int fi = 0;
+        if (p->isLocal) flags[fi++] = 'L'; if (p->isGhost) flags[fi++] = 'G';
+        if (p->isDowned) flags[fi++] = 'D'; if (p->inVent) flags[fi++] = 'V';
+        if (p->isInvisible) flags[fi++] = 'I'; if (p->isInPelican) flags[fi++] = 'P';
+        if (p->isSpectator) flags[fi++] = 'S'; if (p->isMorphed) flags[fi++] = 'M';
+        if (p->isRunning) flags[fi++] = 'R'; if (p->hasKilledThisRound) flags[fi++] = 'K';
+        if (p->isInfected) flags[fi++] = '*'; if (p->hasBomb) flags[fi++] = 'B';
+        flags[fi] = '\0'; if (fi == 0) strcpy(flags, "-");
+        snprintf(buf, sizeof(buf), "#%02d %-12s %s(%d) T%d %.0fm Tsk:%d [%s]", p->entityNumber, p->name, ri.name, p->role, p->teamId, p->distanceToCamera, p->tasksRemaining, flags);
         int color = p->isLocal ? COLOR_CYAN : (p->isGhost ? COLOR_GRAY : ri.color);
-        BatchAddText(centerX, startY, buf, color);
-        startY += lineHeight;
-        
+        BatchAddText(centerX, startY, buf, color); startY += lineHeight;
         if (p->killedBy[0] != '\0') {
             snprintf(buf, sizeof(buf), "   -> Killed by: %s", p->killedBy);
-            BatchAddText(centerX, startY, buf, COLOR_GRAY);
-            startY += lineHeight;
+            BatchAddText(centerX, startY, buf, COLOR_GRAY); startY += lineHeight;
         }
     }
-    
+
     if (startY < maxY - lineHeight) {
         startY += 10;
         BatchAddText(centerX, startY, "Flags: L=Local G=Ghost D=Down V=Vent I=Invis P=Pelican S=Spec M=Morph R=Run K=Kill *=Infected B=Bomb", COLOR_GRAY);
@@ -887,405 +693,343 @@ void RenderESPBatch() {
     if (!ESPEnabled) return;
     if (ESPHideInVote && isInVotingScreen) return;
     if (ESPHideInLobby && isInLobby) return;
-    if (isInSpotlightScreen) return;
     if (!isInGame) return;
-    
-    if (!g_ESPStabilized) {
-        g_FrameCount++;
-        if (g_FrameCount < STABILIZE_FRAMES) return;
-        g_ESPStabilized = true;
-    }
-    
-    float cx = g_ScreenWidth * 0.5f;
-    float cy = g_ScreenHeight * 0.5f;
+
+    if (!g_ESPStabilized) { g_FrameCount++; if (g_FrameCount < STABILIZE_FRAMES) return; g_ESPStabilized = true; }
+
     float scale = GetESPScale();
+    Vector2 camPos = GetCameraPosition2D();
     Vector2 localPos = g_LocalPlayerPos;
-    
+
+    float playerSx, playerSy;
+    WorldToScreen(localPos, camPos, scale, &playerSx, &playerSy);
+
     for (int i = 0; i < g_RenderPlayerCount; i++) {
         PlayerData* p = &g_RenderPlayers[i];
         if (!p->isValid || p->isLocal) continue;
         if (p->isGhost && !SeeGhosts) continue;
         if (p->isInPelican) continue;
         if (p->position.x == 0 && p->position.y == 0) continue;
-        
+
         float sx, sy;
-        WorldToScreen(p->position, localPos, scale, &sx, &sy);
-        
+        WorldToScreen(p->position, camPos, scale, &sx, &sy);
         RoleInfo ri = GetRoleInfo(p->role);
         int color = p->isGhost ? COLOR_GRAY : ri.color;
-        
-        float dist = p->distanceToLocal;
-        
+        float dist = p->distanceToCamera;
         bool onScreen = (sx >= 0 && sx <= g_ScreenWidth && sy >= 0 && sy <= g_ScreenHeight);
-        
+
         if (ESPLines) {
-            float lx1 = cx, ly1 = cy, lx2 = sx, ly2 = sy;
-            if (ClipLine(&lx1, &ly1, &lx2, &ly2)) {
-                BatchAddLine(lx1, ly1, lx2, ly2, color);
-            }
+            float lx1 = playerSx, ly1 = playerSy, lx2 = sx, ly2 = sy;
+            if (ClipLine(&lx1, &ly1, &lx2, &ly2)) BatchAddLine(lx1, ly1, lx2, ly2, color);
         }
-        
+
         if (onScreen) {
             float boxW = 0.9f * scale, boxH = 1.6f * scale;
             if (boxW < 45) boxW = 45; if (boxH < 70) boxH = 70;
             if (boxW > 200) boxW = 200; if (boxH > 320) boxH = 320;
-            
-            float boxX = sx - boxW * 0.5f;
-            float boxY = sy - boxH * 0.40f;
-            
+            float boxX = sx - boxW * 0.5f, boxY = sy - boxH * 0.40f;
             if (ESPBox) BatchAddBox(boxX, boxY, boxW, boxH, color);
-            
-            if (ESPDistance) {
-                char dt[16];
-                snprintf(dt, sizeof(dt), "%.1fm", dist);
-                BatchAddText(sx, boxY - 25, dt, COLOR_YELLOW);
-            }
-            
+            if (ESPDistance) { char dt[16]; snprintf(dt, sizeof(dt), "%.1fm", dist); BatchAddText(sx, boxY - 25, dt, COLOR_YELLOW); }
             if (ESPName) {
                 float nameY = boxY - 55;
-                
-                int iconCount = 0;
-                if (p->isInfected) iconCount++;
-                if (p->hasBomb) iconCount++;
-                
+                int iconCount = 0; if (p->isInfected) iconCount++; if (p->hasBomb) iconCount++;
                 float iconX = sx - 90 - (iconCount * 20);
-                
-                if (p->isInfected) {
-                    BatchAddIcon(iconX, nameY + 5, "\uF293", COLOR_LIME);
-                    iconX += 40;
-                }
-                if (p->hasBomb) {
-                    BatchAddIcon(iconX, nameY + 5, "\uF5FB", COLOR_ORANGE);
-                }
-                
+                if (p->isInfected) { BatchAddIcon(iconX, nameY + 5, "\uF293", COLOR_LIME); iconX += 40; }
+                if (p->hasBomb) { BatchAddIcon(iconX, nameY + 5, "\uF5FB", COLOR_ORANGE); }
                 BatchAddText(sx, nameY, p->name, color);
             }
-        } 
-        else if (ESPEdgeIndicator) {
-            float edgeX, edgeY;
-            GetEdgePosition(sx, sy, &edgeX, &edgeY);
-            
+        } else if (ESPEdgeIndicator) {
+            float edgeX, edgeY; GetEdgePosition(sx, sy, &edgeX, &edgeY);
             BatchAddBox(edgeX - 8, edgeY - 8, 16, 16, color);
-            
-            int iconCount = 0;
-            if (p->isInfected) iconCount++;
-            if (p->hasBomb) iconCount++;
-            
-            float iconX = edgeX - 70 - (iconCount * 20);
-            float iconY = edgeY - 25;
-            
-            if (p->isInfected) {
-                BatchAddIcon(iconX, iconY, "\uF293", COLOR_LIME);
-                iconX += 40;
-            }
-            if (p->hasBomb) {
-                BatchAddIcon(iconX, iconY, "\uF5FB", COLOR_ORANGE);
-            }
-            
-            char et[64];
-            snprintf(et, sizeof(et), "%s %.0fm", p->name, dist);
-            
+            int iconCount = 0; if (p->isInfected) iconCount++; if (p->hasBomb) iconCount++;
+            float iconX = edgeX - 70 - (iconCount * 20), iconY = edgeY - 25;
+            if (p->isInfected) { BatchAddIcon(iconX, iconY, "\uF293", COLOR_LIME); iconX += 40; }
+            if (p->hasBomb) { BatchAddIcon(iconX, iconY, "\uF5FB", COLOR_ORANGE); }
+            char et[64]; snprintf(et, sizeof(et), "%s %.0fm", p->name, dist);
             float tx = edgeX, ty = edgeY - 25;
-            if (edgeX < 150) tx = 150;
-            else if (edgeX > g_ScreenWidth - 150) tx = g_ScreenWidth - 150;
+            if (edgeX < 150) tx = 150; else if (edgeX > g_ScreenWidth - 150) tx = g_ScreenWidth - 150;
             if (edgeY < 80) ty = edgeY + 35;
-            
             BatchAddText(tx, ty, et, color);
         }
     }
 }
 
 void ClearAllESP() {
-    g_PlayerCount = 0;
-    g_RenderPlayerCount = 0;
-    g_ESPStabilized = false;
-    g_FrameCount = 0;
-    isInGame = false;
-    isInLobby = true;
-    localPlayerInstance = NULL;
-    localPlayerObject = NULL;
-    g_DeadPlayersCount = 0;
-    g_LocalTasksRemaining = 0;
-    g_LocalKilledBy[0] = '\0';
-    g_LocalIsInfected = false;
-    g_LocalHasBomb = false;
-    g_RoofRemovedThisRound = false;
-    
+    g_PlayerInstanceCount = 0; g_RenderPlayerCount = 0; g_ESPStabilized = false; g_FrameCount = 0;
+    isInGame = false; isInLobby = true; localPlayerInstance = NULL; localPlayerObject = NULL;
+    g_DeadPlayersCount = 0; g_LocalTasksRemaining = 0; g_LocalKilledBy[0] = '\0';
+    g_LocalIsInfected = false; g_LocalHasBomb = false; g_RoofRemovedThisRound = false;
+    g_CameraPosition = {0, 0, 0}; g_CinemachineCamera = nullptr; g_CameraPositionValid = false;
     ResetDroneViewDelay();
-    
     JNIEnv* env = GetJNIEnv();
     if (env && g_BatchDrawMethod && g_MenuClass) {
         jstring empty = env->NewStringUTF("");
-        if (empty) {
-            env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, empty);
-            env->DeleteLocalRef(empty);
+        if (empty) { env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, empty); env->DeleteLocalRef(empty); }
+    }
+}
+
+void RefreshPlayerDataAndRender() {
+    if (!g_ESPReady) return;
+    if (isInSpotlightScreen) {
+        BatchClear();
+        JNIEnv* env = GetJNIEnv();
+        if (env) SendBatchESP(env);
+        return;
+    }
+
+    Vector2 camPos = GetCameraPosition2D();
+    g_LocalPlayerPos = localPlayerInstance ? GetPlayerPosition(localPlayerInstance, true) : g_LocalPlayerPos;
+
+    g_RenderPlayerCount = 0;
+    for (int i = 0; i < g_PlayerInstanceCount && g_RenderPlayerCount < MAX_PLAYERS; i++) {
+        if (g_PlayerInstances[i].isValid && g_PlayerInstances[i].instance) {
+            CollectPlayerDataFromInstance(g_PlayerInstances[i].instance, &g_RenderPlayers[g_RenderPlayerCount], camPos);
+            g_RenderPlayerCount++;
         }
+    }
+
+    static int screenUpdateCounter = 0;
+    if (++screenUpdateCounter >= 60) { UpdateScreenSize(); screenUpdateCounter = 0; }
+
+    if (ESPEnabled || DebugMode) {
+        BatchClear();
+        if (DebugMode) RenderDebugPanelBatch();
+        if (ESPEnabled) RenderESPBatch();
+        JNIEnv* env = GetJNIEnv();
+        if (env) SendBatchESP(env);
     }
 }
 
 int (*old_get_deadPlayersCount)() = NULL;
 
-// PlayableEntity.Update - RVA: 0x3DC28D8 (dump.cs TypeDefIndex: 6285)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43A79D8 (TypeDefIndex: 20422)
+ * ============================================================================
+ */
+void (*old_StateCameraUpdate)(void* instance, Vector3 worldUp, float deltaTime);
+void StateCameraUpdate(void* instance, Vector3 worldUp, float deltaTime) {
+    old_StateCameraUpdate(instance, worldUp, deltaTime);
+    if (instance) {
+        g_CinemachineCamera = instance;
+        g_CameraPosition = *(Vector3*)((uintptr_t)instance + OFFSET_CSDC_STATE + OFFSET_CS_RAWPOSITION);
+        g_CameraPositionValid = true;
+        RefreshPlayerDataAndRender();
+    }
+}
+
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * PlayableEntity.Update - RVA: 0x3DC28D8 (TypeDefIndex: 6285)
+ * ============================================================================
+ */
 void (*old_Update)(void *instance);
 void Update(void *instance) {
     if (instance) {
         bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
-        
         if (isLocal) {
             localPlayerInstance = instance;
             isInGame = true;
             localPlayerRole = GetRoleType(instance);
             isInLobby = IsPlayerInLobby(instance);
-            
-            g_PlayerCount = 0;
+            g_PlayerInstanceCount = 0;
             g_LocalPlayerPos = GetPlayerPosition(instance, true);
-            
             g_LocalTasksRemaining = *(int*)((uintptr_t)instance + OFFSET_PE_TASKSREMAINING);
             g_LocalIsInfected = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINFECTED);
             g_LocalHasBomb = *(bool*)((uintptr_t)instance + OFFSET_PE_HASBOMB);
             GetKilledBy(instance, g_LocalKilledBy, sizeof(g_LocalKilledBy));
-            
-            if (old_get_deadPlayersCount) {
-                g_DeadPlayersCount = old_get_deadPlayersCount();
-            }
-            
-            if (UnlimitedVision) {
-                *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
-            }
-            
-            if (btnSetPosition) {
-                SavedPosX = g_LocalPlayerPos.x;
-                SavedPosY = g_LocalPlayerPos.y;
-                TeleportX = g_LocalPlayerPos.x;
-                TeleportY = g_LocalPlayerPos.y;
-                btnSetPosition = false;
-                LOGI("Position saved: %.2f, %.2f", SavedPosX, SavedPosY);
-            }
-            
-            if (btnTeleport && TeleportTo) {
-                Vector2 targetPos = {TeleportX, TeleportY};
-                TeleportTo(instance, targetPos, true);
-                btnTeleport = false;
-                LOGI("Teleported to: %.2f, %.2f", TeleportX, TeleportY);
-            }
-            
-            if (btnCallEmergency && PlayerController_CallEmergency) {
-                PlayerController_CallEmergency(instance);
-                btnCallEmergency = false;
-                LOGI("Emergency called");
-            }
-            
+            if (old_get_deadPlayersCount) g_DeadPlayersCount = old_get_deadPlayersCount();
+            if (UnlimitedVision) *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
+            if (btnSetPosition) { SavedPosX = g_LocalPlayerPos.x; SavedPosY = g_LocalPlayerPos.y; TeleportX = g_LocalPlayerPos.x; TeleportY = g_LocalPlayerPos.y; btnSetPosition = false; LOGI("Position saved: %.2f, %.2f", SavedPosX, SavedPosY); }
+            if (btnTeleport && TeleportTo) { Vector2 targetPos = {TeleportX, TeleportY}; TeleportTo(instance, targetPos, true); btnTeleport = false; LOGI("Teleported to: %.2f, %.2f", TeleportX, TeleportY); }
+            if (btnCallEmergency && PlayerController_CallEmergency) { PlayerController_CallEmergency(instance); btnCallEmergency = false; LOGI("Emergency called"); }
             CheckAutoTask();
         }
-        
-        if ((ESPEnabled || DebugMode) && g_PlayerCount < MAX_PLAYERS) {
-            PlayerData* p = &g_Players[g_PlayerCount];
-            p->position = GetPlayerPosition(instance, isLocal);
-            p->isGhost = *(bool*)((uintptr_t)instance + OFFSET_PE_ISGHOST);
-            p->isLocal = isLocal;
-            p->role = GetRoleType(instance);
-            p->teamId = *(int*)((uintptr_t)instance + OFFSET_PE_TEAMID);
-            p->entityNumber = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
-            
-            GetPlayerNickname(instance, p->name, sizeof(p->name));
-            
-            p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
-            p->inVent = *(bool*)((uintptr_t)instance + OFFSET_PE_INVENT);
-            p->isInvisible = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINVISIBLE);
-            p->isInPelican = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINPELICAN);
-            p->isSpectator = *(bool*)((uintptr_t)instance + OFFSET_PE_ISSPECTATOR);
-            p->isMorphed = *(bool*)((uintptr_t)instance + OFFSET_PE_ISMORPHED);
-            p->isRunning = *(bool*)((uintptr_t)instance + OFFSET_PE_ISRUNNING);
-            p->hasKilledThisRound = *(bool*)((uintptr_t)instance + OFFSET_PE_HASKILLED);
-            p->opacity = *(float*)((uintptr_t)instance + OFFSET_PE_TARGETOPACITY);
-            p->isInfected = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINFECTED);
-            p->hasBomb = *(bool*)((uintptr_t)instance + OFFSET_PE_HASBOMB);
-            p->tasksRemaining = *(int*)((uintptr_t)instance + OFFSET_PE_TASKSREMAINING);
-            GetKilledBy(instance, p->killedBy, sizeof(p->killedBy));
-            
-            if (!isLocal) {
-                float dx = p->position.x - g_LocalPlayerPos.x;
-                float dy = p->position.y - g_LocalPlayerPos.y;
-                p->distanceToLocal = sqrtf(dx*dx + dy*dy);
-            } else {
-                p->distanceToLocal = 0;
-            }
-            
-            p->isValid = true;
-            g_PlayerCount++;
+        if ((ESPEnabled || DebugMode) && g_PlayerInstanceCount < MAX_PLAYERS) {
+            g_PlayerInstances[g_PlayerInstanceCount].instance = instance;
+            g_PlayerInstances[g_PlayerInstanceCount].isLocal = isLocal;
+            g_PlayerInstances[g_PlayerInstanceCount].isValid = true;
+            g_PlayerInstanceCount++;
         }
     }
     old_Update(instance);
 }
 
-// PlayableEntity.LateUpdate - RVA: 0x3DC368C (dump.cs TypeDefIndex: 6285)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * PlayableEntity.LateUpdate - RVA: 0x3DC368C (TypeDefIndex: 6285)
+ * ============================================================================
+ */
 void (*old_LateUpdate)(void *instance);
 void LateUpdate(void *instance) {
     old_LateUpdate(instance);
-    
-    if (instance && g_ESPReady) {
-        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
-        
-        if (isLocal) {
-            g_RenderPlayerCount = g_PlayerCount;
-            memcpy(g_RenderPlayers, g_Players, sizeof(PlayerData) * g_PlayerCount);
-            
-            static int screenUpdateCounter = 0;
-            if (++screenUpdateCounter >= 60) {
-                UpdateScreenSize();
-                screenUpdateCounter = 0;
-            }
-            
-            if (ESPEnabled || DebugMode) {
-                BatchClear();
-                
-                if (DebugMode) RenderDebugPanelBatch();
-                if (ESPEnabled) RenderESPBatch();
-                
-                JNIEnv* env = GetJNIEnv();
-                if (env) {
-                    SendBatchESP(env);
-                }
-            }
-        }
-    }
 }
 
-// PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (dump.cs TypeDefIndex: 6285)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (TypeDefIndex: 6285)
+ * ============================================================================
+ */
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
 void TurnIntoGhost(void *instance, int deathReason) {
     if (AntiDeath && instance == localPlayerInstance) return;
     old_TurnIntoGhost(instance, deathReason);
 }
 
-// LocalPlayer.Update - RVA: 0x3D986B8 (dump.cs TypeDefIndex: 6261)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * LocalPlayer.Update - RVA: 0x3D986B8 (TypeDefIndex: 6261)
+ * ============================================================================
+ */
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
     old_LocalPlayer_Update(instance);
-    
     if (instance) {
         localPlayerObject = instance;
-        
         void* cam = *(void**)((uintptr_t)instance + OFFSET_LP_MAINCAMERA);
         if (cam) mainCameraObject = cam;
-        
         bool inVote1 = *(bool*)((uintptr_t)instance + OFFSET_LP_INVOTINGSCREEN);
         bool inVote2 = *(bool*)((uintptr_t)instance + OFFSET_LP_INVOTINGTRANSITION);
         isInVotingScreen = inVote1 || inVote2;
-        
         bool startSpotlight = *(bool*)((uintptr_t)instance + OFFSET_LP_INGAMESTARTSPOTLIGHT);
         bool endSpotlight = *(bool*)((uintptr_t)instance + OFFSET_LP_INGAMEENDSPOTLIGHT);
         isInSpotlightScreen = startSpotlight || endSpotlight;
-        
-        if (SeeGhosts && SetCanSeeGhosts) {
-            SetCanSeeGhosts(instance, true);
-        }
-        
-        if (DroneView && OverrideOrthographicSize) {
-            ApplyDroneViewDelayed();
-        }
+        if (SeeGhosts && SetCanSeeGhosts) SetCanSeeGhosts(instance, true);
+        if (DroneView && OverrideOrthographicSize) ApplyDroneViewDelayed();
     }
 }
 
-// LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (dump.cs TypeDefIndex: 6261)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (TypeDefIndex: 6261)
+ * ============================================================================
+ */
 float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
     float speed = old_GetPlayerSpeed(instance);
     return SpeedHack ? speed * SpeedMultiplier : speed;
 }
 
-// GGDRole.OnEnterVent - RVA: 0x3C55C94 (dump.cs TypeDefIndex: 5656)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * GGDRole.OnEnterVent - RVA: 0x3C55C94 (TypeDefIndex: 5656)
+ * ============================================================================
+ */
 void (*old_OnEnterVent)(void *instance, void* vent, bool setCooldown);
-void OnEnterVent(void *instance, void* vent, bool setCooldown) {
-    old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown);
-}
+void OnEnterVent(void *instance, void* vent, bool setCooldown) { old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-// GGDRole.OnExitVent - RVA: 0x3C55D88 (dump.cs TypeDefIndex: 5656)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * GGDRole.OnExitVent - RVA: 0x3C55D88 (TypeDefIndex: 5656)
+ * ============================================================================
+ */
 void (*old_OnExitVent)(void *instance, void* vent, bool setCooldown);
-void OnExitVent(void *instance, void* vent, bool setCooldown) {
-    old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown);
-}
+void OnExitVent(void *instance, void* vent, bool setCooldown) { old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-// GGDRole.SetVentCooldown - RVA: 0x3C548AC (dump.cs TypeDefIndex: 5656)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * GGDRole.SetVentCooldown - RVA: 0x3C548AC (TypeDefIndex: 5656)
+ * ============================================================================
+ */
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
-void SetVentCooldown(void *instance, int startCooldown) {
-    old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown);
-}
+void SetVentCooldown(void *instance, int startCooldown) { old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown); }
 
-// PlayableEntity.Despawn - RVA: 0x3DC5328 (dump.cs TypeDefIndex: 6285)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * PlayableEntity.Despawn - RVA: 0x3DC5328 (TypeDefIndex: 6285)
+ * ============================================================================
+ */
 void (*old_Despawn)(void *instance);
 void Despawn(void *instance) {
-    if (instance) {
-        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
-        if (isLocal) ClearAllESP();
-    }
+    if (instance) { bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL); if (isLocal) ClearAllESP(); }
     old_Despawn(instance);
 }
 
-// TasksHandler.OnEnable - RVA: 0x3D8CC74 (dump.cs TypeDefIndex: 6235)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * TasksHandler.OnEnable - RVA: 0x3D8CC74 (TypeDefIndex: 6235)
+ * ============================================================================
+ */
 void (*old_TasksHandler_OnEnable)(void* instance);
-void TasksHandler_OnEnable(void* instance) {
-    if (instance) {
-        g_TasksHandler = instance;
-    }
-    old_TasksHandler_OnEnable(instance);
-}
+void TasksHandler_OnEnable(void* instance) { if (instance) g_TasksHandler = instance; old_TasksHandler_OnEnable(instance); }
 
-// TasksHandler.OnDisable - RVA: 0x3D8CD7C (dump.cs TypeDefIndex: 6235)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * TasksHandler.OnDisable - RVA: 0x3D8CD7C (TypeDefIndex: 6235)
+ * ============================================================================
+ */
 void (*old_TasksHandler_OnDisable)(void* instance);
-void TasksHandler_OnDisable(void* instance) {
-    if (instance == g_TasksHandler) {
-        g_TasksHandler = NULL;
-    }
-    old_TasksHandler_OnDisable(instance);
-}
+void TasksHandler_OnDisable(void* instance) { if (instance == g_TasksHandler) g_TasksHandler = NULL; old_TasksHandler_OnDisable(instance); }
 
-// RoofHandler.Awake - RVA: 0x3D3767C (dump.cs TypeDefIndex: 6100)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * RoofHandler.Awake - RVA: 0x3D3767C (TypeDefIndex: 6100)
+ * ============================================================================
+ */
 void (*old_RoofHandler_Awake)(void* instance);
-void RoofHandler_Awake(void* instance) {
-    if (instance) {
-        g_RoofHandler = instance;
-    }
-    old_RoofHandler_Awake(instance);
-}
+void RoofHandler_Awake(void* instance) { if (instance) g_RoofHandler = instance; old_RoofHandler_Awake(instance); }
 
-// RoofHandler.OnDestroy - RVA: 0x3D37780 (dump.cs TypeDefIndex: 6100)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * RoofHandler.OnDestroy - RVA: 0x3D37780 (TypeDefIndex: 6100)
+ * ============================================================================
+ */
 void (*old_RoofHandler_OnDestroy)(void* instance);
-void RoofHandler_OnDestroy(void* instance) {
-    if (instance == g_RoofHandler) {
-        g_RoofHandler = NULL;
-        g_RoofRemovedThisRound = false;
-    }
-    old_RoofHandler_OnDestroy(instance);
-}
+void RoofHandler_OnDestroy(void* instance) { if (instance == g_RoofHandler) { g_RoofHandler = NULL; g_RoofRemovedThisRound = false; } old_RoofHandler_OnDestroy(instance); }
 
-// LocalPlayer.StartRound - RVA: 0x3D9FD58 (dump.cs TypeDefIndex: 6261)
+/*
+ * ============================================================================
+ * HOOK KAYNAKLARI
+ * ============================================================================
+ * LocalPlayer.StartRound - RVA: 0x3D9FD58 (TypeDefIndex: 6261)
+ * ============================================================================
+ */
 void (*old_LocalPlayer_StartRound)(void* instance, bool isFirstRound);
 void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
     g_RoofRemovedThisRound = false;
-    
-    if (RemoveRoof && g_RoofHandler && RoofHandler_DeactivateRoofs) {
-        RoofHandler_DeactivateRoofs(g_RoofHandler, true);
-        g_RoofRemovedThisRound = true;
-    }
-    
+    if (RemoveRoof && g_RoofHandler && RoofHandler_DeactivateRoofs) { RoofHandler_DeactivateRoofs(g_RoofHandler, true); g_RoofRemovedThisRound = true; }
     old_LocalPlayer_StartRound(instance, isFirstRound);
 }
 
 jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     InitESP(env);
-    
     const char *features[] = {
         OBFUSCATE("Category_[\uECB4]Vision & Cooldown"),
         OBFUSCATE("Toggle_[\uECB4]Unlimited Vision"),
-        OBFUSCATE("Toggle_[\F577]Remove Roof"),
+        OBFUSCATE("Toggle_[\uF577]Remove Roof"),
         OBFUSCATE("Toggle_[\uF210]No Vent Cooldown"),
         OBFUSCATE("Toggle_[\uEDB4]See Ghosts"),
-        
         OBFUSCATE("Category_[\uF605]Camera"),
         OBFUSCATE("Toggle_[\uF2DA]Drone View"),
         OBFUSCATE("SeekBar_[\uF403]Zoom Level_5_25"),
-        
         OBFUSCATE("Category_[\uF04B]ESP Settings"),
         OBFUSCATE("Toggle_[\uF04B]ESP Enabled"),
         OBFUSCATE("Toggle_True_[\uF63A]ESP Lines"),
@@ -1295,81 +1039,42 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
         OBFUSCATE("Toggle_True_[\uEBBD]Edge Indicator"),
         OBFUSCATE("Toggle_True_[\uECB2]Hide in Vote Screen"),
         OBFUSCATE("Toggle_[\uECB2]Hide in Lobby"),
-        
         OBFUSCATE("Category_[\uEF13]Teleport"),
         OBFUSCATE("InputValue_999_[\uEF05]Teleport X"),
         OBFUSCATE("InputValue_999_[\uEF05]Teleport Y"),
         OBFUSCATE("Button_[\uF0B2]Set Current Position"),
         OBFUSCATE("Button_[\uF093]Teleport Now"),
-        
         OBFUSCATE("Category_[\uEE34]Task & Emergency"),
         OBFUSCATE("Toggle_[\uF216]Auto Complete Tasks"),
         OBFUSCATE("Button_[\uEF93]Call Emergency"),
-        
         OBFUSCATE("Category_[\uEB06]Debug Panel"),
         OBFUSCATE("Toggle_[\uF1F5]Show Debug Info"),
-        
         OBFUSCATE("Category_[\uED3D]Experimental [May Not Work]"),
         OBFUSCATE("Toggle_[\uF103]Anti-Death [LOCAL]"),
         OBFUSCATE("Toggle_[\uEC11]Speed Boost [LOCAL]"),
         OBFUSCATE("SeekBar_[\uF403]Speed Multiplier_10_40"),
-        
         OBFUSCATE("Category_[\uF447]About"),
         OBFUSCATE("RichTextView_[\uF185]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
         OBFUSCATE("ButtonLink_[\uF2D4]YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
         OBFUSCATE("ButtonLink_[\uEDCA]Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
         OBFUSCATE("ButtonLink_[\uEEAF]GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
     };
-
     int count = sizeof(features) / sizeof(features[0]);
     jobjectArray ret = env->NewObjectArray(count, env->FindClass("java/lang/String"), env->NewStringUTF(""));
-    for (int i = 0; i < count; i++) {
-        env->SetObjectArrayElement(ret, i, env->NewStringUTF(features[i]));
-    }
+    for (int i = 0; i < count; i++) env->SetObjectArrayElement(ret, i, env->NewStringUTF(features[i]));
     return ret;
 }
 
-void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featName, 
-             jint value, jlong Lvalue, jboolean boolean, jstring str) {
+void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featName, jint value, jlong Lvalue, jboolean boolean, jstring str) {
     if (!g_JavaVM) env->GetJavaVM(&g_JavaVM);
-    
     switch (featNum) {
-        case 0:
-            UnlimitedVision = boolean;
-            if (!boolean && localPlayerInstance) 
-                *(bool*)((uintptr_t)localPlayerInstance + OFFSET_PE_FOGOFWAR) = true;
-            break;
-        case 1:
-            RemoveRoof = boolean;
-            if (boolean && g_RoofHandler && RoofHandler_DeactivateRoofs && !g_RoofRemovedThisRound) {
-                RoofHandler_DeactivateRoofs(g_RoofHandler, true);
-                g_RoofRemovedThisRound = true;
-            } else if (!boolean && g_RoofHandler && RoofHandler_DeactivateRoofs) {
-                RoofHandler_DeactivateRoofs(g_RoofHandler, false);
-                g_RoofRemovedThisRound = false;
-            }
-            break;
+        case 0: UnlimitedVision = boolean; if (!boolean && localPlayerInstance) *(bool*)((uintptr_t)localPlayerInstance + OFFSET_PE_FOGOFWAR) = true; break;
+        case 1: RemoveRoof = boolean; if (boolean && g_RoofHandler && RoofHandler_DeactivateRoofs && !g_RoofRemovedThisRound) { RoofHandler_DeactivateRoofs(g_RoofHandler, true); g_RoofRemovedThisRound = true; } else if (!boolean && g_RoofHandler && RoofHandler_DeactivateRoofs) { RoofHandler_DeactivateRoofs(g_RoofHandler, false); g_RoofRemovedThisRound = false; } break;
         case 2: NoCooldown = boolean; break;
-        case 3:
-            SeeGhosts = boolean;
-            if (!boolean && localPlayerObject && SetCanSeeGhosts)
-                SetCanSeeGhosts(localPlayerObject, false);
-            break;
-        case 4:
-            DroneView = boolean;
-            if (!boolean) DisableDroneView();
-            else ResetDroneViewDelay();
-            break;
-        case 5:
-            DroneZoom = (float)value;
-            if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize)
-                OverrideOrthographicSize(localPlayerObject, DroneZoom);
-            break;
-        case 6:
-            ESPEnabled = boolean;
-            if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; }
-            SetESPEnabled(boolean || DebugMode);
-            break;
+        case 3: SeeGhosts = boolean; if (!boolean && localPlayerObject && SetCanSeeGhosts) SetCanSeeGhosts(localPlayerObject, false); break;
+        case 4: DroneView = boolean; if (!boolean) DisableDroneView(); else ResetDroneViewDelay(); break;
+        case 5: DroneZoom = (float)value; if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize) OverrideOrthographicSize(localPlayerObject, DroneZoom); break;
+        case 6: ESPEnabled = boolean; if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; } SetESPEnabled(boolean || DebugMode); break;
         case 7: ESPLines = boolean; break;
         case 8: ESPBox = boolean; break;
         case 9: ESPDistance = boolean; break;
@@ -1381,17 +1086,9 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 15: TeleportY = (float)value; break;
         case 16: btnSetPosition = true; break;
         case 17: btnTeleport = true; break;
-        case 18:
-            AutoTaskComplete = boolean;
-            if (boolean) g_LastAutoTaskTime = std::chrono::steady_clock::now();
-            break;
-        case 19:
-            btnCallEmergency = true;
-            break;
-        case 20:
-            DebugMode = boolean;
-            SetESPEnabled(boolean || ESPEnabled);
-            break;
+        case 18: AutoTaskComplete = boolean; if (boolean) g_LastAutoTaskTime = std::chrono::steady_clock::now(); break;
+        case 19: btnCallEmergency = true; break;
+        case 20: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
         case 21: AntiDeath = boolean; break;
         case 22: SpeedHack = boolean; break;
         case 23: SpeedMultiplier = (float)value / 10.0f; break;
@@ -1402,84 +1099,62 @@ ElfScanner g_il2cppELF;
 
 void hack_thread() {
     LOGI("pthread created");
-
     while (!isLibraryLoaded(targetLibName)) sleep(1);
-
-    do { sleep(1); g_il2cppELF = ElfScanner::createWithPath(targetLibName); } 
-    while (!g_il2cppELF.isValid());
-
+    do { sleep(1); g_il2cppELF = ElfScanner::createWithPath(targetLibName); } while (!g_il2cppELF.isValid());
     LOGI("%s loaded", (const char*)targetLibName);
-    
     void* il2cppHandle = dlopen("libil2cpp.so", RTLD_NOW);
-    if (il2cppHandle) {
-        il2cpp_string_new_func = (il2cpp_string_new_t)dlsym(il2cppHandle, "il2cpp_string_new");
-        LOGI("il2cpp_string_new: %p", il2cpp_string_new_func);
-    }
-
+    if (il2cppHandle) { il2cpp_string_new_func = (il2cpp_string_new_t)dlsym(il2cppHandle, "il2cpp_string_new"); LOGI("il2cpp_string_new: %p", il2cpp_string_new_func); }
 #if defined(__aarch64__)
-    // PlayableEntity.Update - RVA: 0x3DC28D8 (dump.cs TypeDefIndex: 6285)
+    /*
+     * ============================================================================
+     * HOOK RVA KAYNAKLARI
+     * ============================================================================
+     * PlayableEntity.Update - RVA: 0x3DC28D8 (TypeDefIndex: 6285)
+     * PlayableEntity.LateUpdate - RVA: 0x3DC368C (TypeDefIndex: 6285)
+     * PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (TypeDefIndex: 6285)
+     * PlayableEntity.Despawn - RVA: 0x3DC5328 (TypeDefIndex: 6285)
+     * LocalPlayer.Update - RVA: 0x3D986B8 (TypeDefIndex: 6261)
+     * LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (TypeDefIndex: 6261)
+     * LocalPlayer.StartRound - RVA: 0x3D9FD58 (TypeDefIndex: 6261)
+     * LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (TypeDefIndex: 6261)
+     * LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (TypeDefIndex: 6261)
+     * PlayableEntity.TeleportTo - RVA: 0x3DD33EC (TypeDefIndex: 6285)
+     * GGDRole.OnEnterVent - RVA: 0x3C55C94 (TypeDefIndex: 5656)
+     * GGDRole.OnExitVent - RVA: 0x3C55D88 (TypeDefIndex: 5656)
+     * GGDRole.SetVentCooldown - RVA: 0x3C548AC (TypeDefIndex: 5656)
+     * TasksHandler.OnEnable - RVA: 0x3D8CC74 (TypeDefIndex: 6235)
+     * TasksHandler.OnDisable - RVA: 0x3D8CD7C (TypeDefIndex: 6235)
+     * TasksHandler.CompleteTask - RVA: 0x3D889C4 (TypeDefIndex: 6235)
+     * TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (TypeDefIndex: 6235)
+     * RoofHandler.Awake - RVA: 0x3D3767C (TypeDefIndex: 6100)
+     * RoofHandler.OnDestroy - RVA: 0x3D37780 (TypeDefIndex: 6100)
+     * RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (TypeDefIndex: 6100)
+     * PlayerController.CallEmergency - RVA: 0x3DE40FC (TypeDefIndex: 6283)
+     * CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43A79D8 (TypeDefIndex: 20422)
+     * ============================================================================
+     */
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC28D8")), Update, old_Update);
-    
-    // PlayableEntity.LateUpdate - RVA: 0x3DC368C (dump.cs TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC368C")), LateUpdate, old_LateUpdate);
-    
-    // PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (dump.cs TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCE370")), TurnIntoGhost, old_TurnIntoGhost);
-    
-    // PlayableEntity.Despawn - RVA: 0x3DC5328 (dump.cs TypeDefIndex: 6285)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC5328")), Despawn, old_Despawn);
-    
-    // LocalPlayer.Update - RVA: 0x3D986B8 (dump.cs TypeDefIndex: 6261)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D986B8")), LocalPlayer_Update, old_LocalPlayer_Update);
-    
-    // LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (dump.cs TypeDefIndex: 6261)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA7768")), GetPlayerSpeed, old_GetPlayerSpeed);
-    
-    // LocalPlayer.StartRound - RVA: 0x3D9FD58 (dump.cs TypeDefIndex: 6261)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D9FD58")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
-    
-    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (dump.cs TypeDefIndex: 6261)
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x43A79D8")), StateCameraUpdate, old_StateCameraUpdate);
     OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DA813C")));
-    
-    // PlayableEntity.TeleportTo - RVA: 0x3DD33EC (dump.cs TypeDefIndex: 6285)
     TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DD33EC")));
-    
-    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (dump.cs TypeDefIndex: 6261)
     SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DAF83C")));
-    
-    // GGDRole.OnEnterVent - RVA: 0x3C55C94 (dump.cs TypeDefIndex: 5656)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55C94")), OnEnterVent, old_OnEnterVent);
-    
-    // GGDRole.OnExitVent - RVA: 0x3C55D88 (dump.cs TypeDefIndex: 5656)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55D88")), OnExitVent, old_OnExitVent);
-    
-    // GGDRole.SetVentCooldown - RVA: 0x3C548AC (dump.cs TypeDefIndex: 5656)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C548AC")), SetVentCooldown, old_SetVentCooldown);
-    
-    // TasksHandler.OnEnable - RVA: 0x3D8CC74 (dump.cs TypeDefIndex: 6235)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8CC74")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
-    
-    // TasksHandler.OnDisable - RVA: 0x3D8CD7C (dump.cs TypeDefIndex: 6235)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8CD7C")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
-    
-    // TasksHandler.CompleteTask - RVA: 0x3D889C4 (dump.cs TypeDefIndex: 6235)
     TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D889C4")));
-    
-    // TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (dump.cs TypeDefIndex: 6235)
     TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D908DC")));
-    
-    // RoofHandler.Awake - RVA: 0x3D3767C (dump.cs TypeDefIndex: 6100)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D3767C")), RoofHandler_Awake, old_RoofHandler_Awake);
-    
-    // RoofHandler.OnDestroy - RVA: 0x3D37780 (dump.cs TypeDefIndex: 6100)
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D37780")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
-    
-    // RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (dump.cs TypeDefIndex: 6100)
     RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D3798C")));
-    
-    // PlayerController.CallEmergency - RVA: 0x3DE40FC (dump.cs TypeDefIndex: 6283)
     PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DE40FC")));
-    
     LOGI("All hooks installed!");
 #endif
     LOGI("Done");

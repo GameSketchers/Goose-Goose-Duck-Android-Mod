@@ -22,23 +22,31 @@
 
 | Category | Features |
 |:--------:|:---------|
-| 👁️ **Vision** | `Unlimited Vision` `Drone View (5-25x Zoom)` |
-| 🎯 **ESP** | `Player ESP` `Lines` `Box` `Distance` `Names` `Edge Indicator` |
-| ⚡ **Cooldowns** | `No Vent Cooldown` |
-| 🚀 **Teleport** | `Set Position` `Teleport Now` |
-| 🛠️ **Debug** | `Debug Panel` `Player Info` `Position Tracking` |
-| 🧪 **Experimental** | `Anti-Death` `Speed Boost` |
+| 👁️ **Vision** | `Unlimited Vision (Fog Hack)` `See Ghosts` `Remove Roof` `Drone View (5-25x Zoom)` |
+| 🎯 **ESP** | `Player ESP` `Lines` `Box` `Distance` `Names` `Edge Indicators` `Hide in Vote/Lobby` |
+| ⚡ **Utility** | `No Vent Cooldown` `Auto Complete Tasks` `Remote Call Emergency` |
+| 🚀 **Movement** | `Set Position` `Teleport to Saved` `Teleport to Coordinates` `Speed Hack` |
+| 🛠️ **Debug** | `Debug Overlay` `Player Info` `Position Tracking` `Entity Dump` |
+| 🧪 **Experimental** | `Anti-Death (Local)` |
 
 ---
 
-## 🎨 ESP Colors
+## 🎨 ESP Colors & Indicators
 
-| Color | Role |
+| Color | Role / Status |
 |:-----:|:-----|
+| 💠 **Cyan** | Local Player (You) |
 | ⚪ **White** | Innocent (Goose, etc.) |
-| 🔴 **Red** | Killer (Duck, etc.) |
-| 🟢 **Green** | Neutral Killer (Pelican, Vulture) |
-| 🟠 **Orange** | Neutral (Dodo, Pigeon, Falcon) |
+| 🔴 **Red** | Killers (Duck, Assassin, Professional, etc.) |
+| 🟢 **Green** | Neutral Killers (Pelican, Vulture) |
+| 🟠 **Orange** | Neutrals (Pigeon, Falcon) |
+| 🟡 **Yellow** | Dodo / Dueling Dodo |
+| ⚫ **Gray** | Ghosts / Dead Players |
+
+**Special Indicators:**
+- 🦠 **Bio Icon:** Player is Infected
+- 💣 **Bomb Icon:** Player has a Bomb
+- **Flags:** `[K]` Killed this round, `[V]` In Vent, `[I]` Invisible, `[M]` Morphed
 
 ---
 
@@ -46,7 +54,7 @@
 
 1. Go to [**Releases**](https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod/releases)
 2. Download latest **APK**
-3. Install & Play!
+3. Install & Play! (Grant Overlay permissions if asked)
 
 ---
 
