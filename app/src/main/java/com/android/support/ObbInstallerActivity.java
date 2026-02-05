@@ -59,7 +59,7 @@ public class ObbInstallerActivity extends Activity {
     private static final String ICON_ROCKET = "\uF094";
 
     //================== OBB ==================//
-    private static final String OBB_FILE_NAME = "main.200524.com.Gaggle.fun.GooseGooseDuck.obb";
+    private static final String OBB_FILE_NAME = "main.200531.com.Gaggle.fun.GooseGooseDuck.obb";
 
     //================== ICON (Base64) ==================//
     // Buraya kendi base64 resminizi yapıştırın (data:image/png;base64, kısmı OLMADAN veya İLE)

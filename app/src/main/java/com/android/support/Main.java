@@ -15,7 +15,7 @@ public class Main {
         System.loadLibrary("anonimbiri");
     }
 
-    private static final String OBB_FILE_NAME = "main.200524.com.Gaggle.fun.GooseGooseDuck.obb";
+    private static final String OBB_FILE_NAME = "main.200531.com.Gaggle.fun.GooseGooseDuck.obb";
 
     private static native void CheckOverlayPermission(Context context);
 

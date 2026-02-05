@@ -23,6 +23,7 @@
 bool AntiDeath = false;
 bool UnlimitedVision = false;
 bool NoCooldown = false;
+bool NoClip = false;
 bool SeeGhosts = false;
 bool RemoveRoof = false;
 bool ESPEnabled = false;
@@ -89,23 +90,8 @@ struct Quaternion { float x, y, z, w; };
 #define COLOR_CRIMSON  0xFFDC143C
 #define COLOR_TEAL     0xFF008080
 
-/*
- * ============================================================================
- * OFFSET KAYNAKLARI (dump.cs referansları)
- * ============================================================================
- * PlayableEntity (TypeDefIndex: 6285)
- * LocalPlayer (TypeDefIndex: 6261)
- * CinemachineStateDrivenCamera (TypeDefIndex: 20422)
- * CameraState (TypeDefIndex: 20469)
- * GGDRole (TypeDefIndex: 5656)
- * TasksHandler (TypeDefIndex: 6235)
- * GameTask (TypeDefIndex: 5574)
- * RoofHandler (TypeDefIndex: 6100)
- * PlayerController (TypeDefIndex: 6283)
- * BetterPhotonTransformView (custom offset)
- * ============================================================================
- */
-
+// PlayableEntity (TypeDefIndex: 6298)
+#define OFFSET_PE_ENTITYNUMBER       0x88
 #define OFFSET_PE_NICKNAME           0x90
 #define OFFSET_PE_ISLOCAL            0x98
 #define OFFSET_PE_PLAYERROLE         0xA0
@@ -116,7 +102,7 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_HASKILLED          0xC5
 #define OFFSET_PE_TEAMID             0xDC
 #define OFFSET_PE_FOGOFWAR           0xF4
-#define OFFSET_PE_ENTITYNUMBER       0x88
+#define OFFSET_PE_ISRUNNING          0x121
 #define OFFSET_PE_ISGHOST            0x178
 #define OFFSET_PE_ISINFECTED         0x17E
 #define OFFSET_PE_ISDOWNED           0x180
@@ -126,29 +112,45 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_ISINPELICAN        0x18D
 #define OFFSET_PE_ISMORPHED          0x18F
 #define OFFSET_PE_ISSPECTATOR        0x200
-#define OFFSET_PE_ISRUNNING          0x121
+#define OFFSET_PE_RIGIDBODY          0x2B8
 #define OFFSET_PE_TRANSFORMVIEW      0x2C0
-
+#define OFFSET_PE_BODYCOLLIDER       0x2D0
+#define OFFSET_PE_PLAYERCOLLIDER     0x2D8
+#define OFFSET_PE_WALLCHECKCOLLIDER  0x2E0
+#define OFFSET_PE_WALLCOLLISIONHANDLER 0x2E8
+#define OFFSET_PE_CONFINECOLLIDER    0x2F0
 #define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
-#define OFFSET_ROLE_TYPE             0x12
 
+// LocalPlayer (TypeDefIndex: 6274)
+#define OFFSET_LP_MAINCAMERA              0x78
+#define OFFSET_LP_STATECAMERA             0x80
+#define OFFSET_LP_SCRIPTABLESTATE         0x88
+#define OFFSET_LP_INVOTINGSCREEN          0xC3
+#define OFFSET_LP_INVOTINGTRANSITION      0xC4
+#define OFFSET_LP_INGAMESTARTSPOTLIGHT    0xC5
+#define OFFSET_LP_INGAMEENDSPOTLIGHT      0xC6
+#define OFFSET_LP_CANSEEGHOSTS            0x150
+
+// BetterPhotonTransformView (TypeDefIndex: 1968)
 #define OFFSET_TV_LATESTPOS          0x30
 #define OFFSET_TV_LASTTRANSFORMPOS   0x38
 
-#define OFFSET_LP_MAINCAMERA                0x78
-#define OFFSET_LP_STATECAMERA               0x80
-#define OFFSET_LP_SCRIPTABLESTATE           0x88
-#define OFFSET_LP_INVOTINGSCREEN            0xC3
-#define OFFSET_LP_INVOTINGTRANSITION        0xC4
-#define OFFSET_LP_INGAMESTARTSPOTLIGHT      0xC5
-#define OFFSET_LP_INGAMEENDSPOTLIGHT        0xC6
+// CinemachineStateDrivenCamera (TypeDefIndex: 20435)
+#define OFFSET_CSDC_STATE            0x108
+#define OFFSET_CS_RAWPOSITION        0x4C
 
-#define OFFSET_CSDC_STATE                   0x108
-#define OFFSET_CS_RAWPOSITION               0x4C
+// GGDRole (TypeDefIndex: 5665)
+#define OFFSET_ROLE_TYPE             0x12
 
-#define OFFSET_TH_SORTEDASSIGNEDTASKS     0x38
-#define OFFSET_GT_TASKID                  0x10
-#define OFFSET_GT_ISFAKETASK              0xD1
+// TasksHandler (TypeDefIndex: 6248)
+#define OFFSET_TH_SORTEDASSIGNEDTASKS  0x38
+
+// GameTask (TypeDefIndex: 5581)
+#define OFFSET_GT_TASKID             0x10
+#define OFFSET_GT_ISFAKETASK         0xD1
+
+// WallCollisionCheckHandler (TypeDefIndex: 1076)
+#define OFFSET_WCCH_INWALL           0x20
 
 struct PlayerInfo {
     void* instance;
@@ -254,27 +256,29 @@ jmethodID g_GetScreenWidthMethod = NULL;
 jmethodID g_GetScreenHeightMethod = NULL;
 bool g_ESPReady = false;
 
-/*
- * ============================================================================
- * FUNCTION POINTER KAYNAKLARI
- * ============================================================================
- * LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (TypeDefIndex: 6261)
- * LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (TypeDefIndex: 6261)
- * PlayableEntity.TeleportTo - RVA: 0x3DD33EC (TypeDefIndex: 6285)
- * TasksHandler.CompleteTask - RVA: 0x3D889C4 (TypeDefIndex: 6235)
- * TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (TypeDefIndex: 6235)
- * RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (TypeDefIndex: 6100)
- * PlayerController.CallEmergency - RVA: 0x3DE40FC (TypeDefIndex: 6283)
- * ============================================================================
- */
-
+// LocalPlayer.OverrideOrthographicSize - RVA: 0x3DB0714
 void (*OverrideOrthographicSize)(void*, float) = NULL;
+
+// PlayableEntity.TeleportTo - RVA: 0x3DDBA74
 void (*TeleportTo)(void*, Vector2, bool) = NULL;
+
+// LocalPlayer.SetCanSeeGhosts - RVA: 0x3DB7E14
 void (*SetCanSeeGhosts)(void*, bool) = NULL;
+
+// TasksHandler.CompleteTask - RVA: 0x3D90F24
 void (*TasksHandler_CompleteTask)(void*, void*, bool, bool, bool, bool) = NULL;
+
+// TasksHandler.UpdateTaskVisuals - RVA: 0x3D98E3C
 void (*TasksHandler_UpdateTaskVisuals)(void*) = NULL;
+
+// RoofHandler.DeactivateRoofs - RVA: 0x3D3F928
 void (*RoofHandler_DeactivateRoofs)(void*, bool) = NULL;
+
+// PlayerController.CallEmergency - RVA: 0x3DEC758
 void (*PlayerController_CallEmergency)(void*) = NULL;
+
+// Collider2D.set_isTrigger - RVA: 0x74A4DE0
+void (*Collider2D_set_isTrigger)(void*, bool) = NULL;
 
 typedef void* (*il2cpp_string_new_t)(const char*);
 il2cpp_string_new_t il2cpp_string_new_func = NULL;
@@ -304,7 +308,10 @@ void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen)
     for (int i = 0; i < length && outIdx < maxLen - 4; i++) {
         uint16_t c = chars[i];
         if (c < 0x80) { if (c >= 0x20) outName[outIdx++] = (char)c; }
-        else if (c < 0x800) { outName[outIdx++] = (char)(0xC0 | (c >> 6)); outName[outIdx++] = (char)(0x80 | (c & 0x3F)); }
+        else if (c < 0x800) { 
+            outName[outIdx++] = (char)(0xC0 | (c >> 6)); 
+            outName[outIdx++] = (char)(0x80 | (c & 0x3F)); 
+        }
         else if (c >= 0xD800 && c <= 0xDBFF) {
             if (i + 1 < length) {
                 uint16_t c2 = chars[i + 1];
@@ -317,8 +324,13 @@ void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen)
                     i++;
                 }
             }
-        } else if (c >= 0xDC00 && c <= 0xDFFF) { continue; }
-        else { outName[outIdx++] = (char)(0xE0 | (c >> 12)); outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F)); outName[outIdx++] = (char)(0x80 | (c & 0x3F)); }
+        } 
+        else if (c >= 0xDC00 && c <= 0xDFFF) { continue; }
+        else { 
+            outName[outIdx++] = (char)(0xE0 | (c >> 12)); 
+            outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F)); 
+            outName[outIdx++] = (char)(0x80 | (c & 0x3F)); 
+        }
     }
     outName[outIdx] = '\0';
 }
@@ -328,8 +340,13 @@ void GetPlayerNickname(void* instance, char* outName, int maxLen) {
     if (outName[0] == '\0') strcpy(outName, "Player");
 }
 
-void GetKilledBy(void* instance, char* outName, int maxLen) { WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen); }
-void GetTaskId(void* task, char* outId, int maxLen) { WideCharToUTF8(task, OFFSET_GT_TASKID, outId, maxLen); }
+void GetKilledBy(void* instance, char* outName, int maxLen) { 
+    WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen); 
+}
+
+void GetTaskId(void* task, char* outId, int maxLen) { 
+    WideCharToUTF8(task, OFFSET_GT_TASKID, outId, maxLen); 
+}
 
 int GetRoleType(void* instance) {
     if (!instance) return -1;
@@ -355,7 +372,8 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
     if (tv) {
         if (forLocal) {
             pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LASTTRANSFORMPOS);
-            if (pos.x == 0 && pos.y == 0) pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
+            if (pos.x == 0 && pos.y == 0) 
+                pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
         } else {
             pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
         }
@@ -393,63 +411,114 @@ RoleInfo GetRoleInfo(int roleId) {
     if (roleId == 24 || roleId == 39) { info.name = (roleId == 24) ? "Falcon" : "DND Falcon"; info.color = COLOR_ORANGE; return info; }
     if (IsKillerRole(roleId)) {
         switch(roleId) {
-            case 2: info.name = "Duck"; break; case 9: info.name = "Cannibal"; break;
-            case 10: info.name = "Morphling"; break; case 12: info.name = "Silencer"; break;
-            case 14: info.name = "Lover Duck"; break; case 17: info.name = "Professional"; break;
-            case 18: info.name = "Spy"; break; case 19: info.name = "Mimic"; break;
-            case 23: info.name = "Assassin"; break; case 25: info.name = "Hitman"; break;
-            case 27: info.name = "Snitch"; break; case 33: info.name = "Demolitionist"; break;
-            case 36: info.name = "GH Duck"; break; case 38: info.name = "DND Duck"; break;
-            case 41: info.name = "DND Morphling"; break; case 44: info.name = "Vampire"; break;
-            case 46: info.name = "Thrall"; break; case 48: info.name = "Identity Thief"; break;
-            case 51: info.name = "Ninja"; break; case 58: info.name = "TTE Thrall"; break;
-            case 59: info.name = "Mummy"; break; case 60: info.name = "Serial Killer"; break;
-            case 62: info.name = "Warlock"; break; case 65: info.name = "Esper Duck"; break;
-            case 66: info.name = "Stalker"; break; case 74: info.name = "Crow"; break;
-            case 75: info.name = "Sin Eater"; break; case 79: info.name = "TLC ID Thief"; break;
-            case 81: info.name = "TLC Camo Duck"; break; case 84: info.name = "Carrier"; break;
-            case 85: info.name = "Parasite"; break; case 103: info.name = "Looter"; break;
-            case 104: info.name = "Sniper"; break; case 106: info.name = "Hawk"; break;
-            case 108: info.name = "Dr Turducken"; break; case 109: info.name = "Monster"; break;
+            case 2: info.name = "Duck"; break;
+            case 9: info.name = "Cannibal"; break;
+            case 10: info.name = "Morphling"; break;
+            case 12: info.name = "Silencer"; break;
+            case 14: info.name = "Lover Duck"; break;
+            case 17: info.name = "Professional"; break;
+            case 18: info.name = "Spy"; break;
+            case 19: info.name = "Mimic"; break;
+            case 23: info.name = "Assassin"; break;
+            case 25: info.name = "Hitman"; break;
+            case 27: info.name = "Snitch"; break;
+            case 33: info.name = "Demolitionist"; break;
+            case 36: info.name = "GH Duck"; break;
+            case 38: info.name = "DND Duck"; break;
+            case 41: info.name = "DND Morphling"; break;
+            case 44: info.name = "Vampire"; break;
+            case 46: info.name = "Thrall"; break;
+            case 48: info.name = "Identity Thief"; break;
+            case 51: info.name = "Ninja"; break;
+            case 58: info.name = "TTE Thrall"; break;
+            case 59: info.name = "Mummy"; break;
+            case 60: info.name = "Serial Killer"; break;
+            case 62: info.name = "Warlock"; break;
+            case 65: info.name = "Esper Duck"; break;
+            case 66: info.name = "Stalker"; break;
+            case 74: info.name = "Crow"; break;
+            case 75: info.name = "Sin Eater"; break;
+            case 79: info.name = "TLC ID Thief"; break;
+            case 81: info.name = "TLC Camo Duck"; break;
+            case 84: info.name = "Carrier"; break;
+            case 85: info.name = "Parasite"; break;
+            case 103: info.name = "Looter"; break;
+            case 104: info.name = "Sniper"; break;
+            case 106: info.name = "Hawk"; break;
+            case 108: info.name = "Dr Turducken"; break;
+            case 109: info.name = "Monster"; break;
             default: info.name = "Killer"; break;
         }
         info.color = COLOR_RED;
         return info;
     }
     switch(roleId) {
-        case 0: info.name = "None"; break; case 1: info.name = "Goose"; break;
-        case 4: info.name = "Bounty"; break; case 5: info.name = "Mechanic"; break;
-        case 6: info.name = "Technician"; break; case 7: info.name = "Medium"; break;
-        case 8: info.name = "Vigilante"; break; case 11: info.name = "Sheriff"; break;
-        case 13: info.name = "Canadian"; break; case 15: info.name = "Lover Goose"; break;
-        case 20: info.name = "Detective"; break; case 22: info.name = "Birdwatcher"; break;
-        case 26: info.name = "Bodyguard"; break; case 28: info.name = "Politician"; break;
-        case 29: info.name = "Locksmith"; break; case 30: info.name = "Mortician"; break;
-        case 31: info.name = "Celebrity"; break; case 32: info.name = "Party Goose"; break;
-        case 35: info.name = "GH Goose"; break; case 37: info.name = "GH Bounty"; break;
-        case 42: info.name = "FP Goose"; break; case 43: info.name = "Explore Goose"; break;
-        case 45: info.name = "Peasant"; break; case 47: info.name = "Spectator"; break;
-        case 49: info.name = "Adventurer"; break; case 50: info.name = "Avenger"; break;
-        case 52: info.name = "Undertaker"; break; case 53: info.name = "Snoop"; break;
-        case 54: info.name = "Esper"; break; case 55: info.name = "Invisibility"; break;
-        case 56: info.name = "Astral"; break; case 61: info.name = "Engineer"; break;
-        case 63: info.name = "Street Urchin"; break; case 64: info.name = "Tracker"; break;
-        case 67: info.name = "Preacher"; break; case 68: info.name = "Inquisitor"; break;
-        case 69: info.name = "Saint"; break; case 70: info.name = "High Priest"; break;
-        case 71: info.name = "Demon Hunter"; break; case 72: info.name = "Initiate"; break;
-        case 73: info.name = "Seamstress"; break; case 76: info.name = "TF Goose"; break;
-        case 77: info.name = "Chicken"; break; case 78: info.name = "TLC Bodyguard"; break;
-        case 80: info.name = "TLC Undertaker"; break; case 82: info.name = "Cupid"; break;
-        case 83: info.name = "Survivalist"; break; case 86: info.name = "Drone"; break;
-        case 87: info.name = "Scientist"; break; case 88: info.name = "HNS Role"; break;
-        case 89: info.name = "Owl"; break; case 90: info.name = "Spotter"; break;
-        case 91: info.name = "HNS Sniper"; break; case 92: info.name = "Lobbyist"; break;
-        case 93: info.name = "Lost Duckling"; break; case 94: info.name = "Fortune Teller"; break;
-        case 95: info.name = "Mime"; break; case 96: info.name = "Raven"; break;
-        case 97: info.name = "Rabbit"; break; case 98: info.name = "Lucid Dreamer"; break;
-        case 99: info.name = "Clown"; break; case 100: info.name = "Soldier"; break;
-        case 101: info.name = "Coroner"; break; case 102: info.name = "Sensor"; break;
-        case 105: info.name = "Delusional"; break; case 107: info.name = "AI"; break;
+        case 0: info.name = "None"; break;
+        case 1: info.name = "Goose"; break;
+        case 4: info.name = "Bounty"; break;
+        case 5: info.name = "Mechanic"; break;
+        case 6: info.name = "Technician"; break;
+        case 7: info.name = "Medium"; break;
+        case 8: info.name = "Vigilante"; break;
+        case 11: info.name = "Sheriff"; break;
+        case 13: info.name = "Canadian"; break;
+        case 15: info.name = "Lover Goose"; break;
+        case 20: info.name = "Detective"; break;
+        case 22: info.name = "Birdwatcher"; break;
+        case 26: info.name = "Bodyguard"; break;
+        case 28: info.name = "Politician"; break;
+        case 29: info.name = "Locksmith"; break;
+        case 30: info.name = "Mortician"; break;
+        case 31: info.name = "Celebrity"; break;
+        case 32: info.name = "Party Goose"; break;
+        case 35: info.name = "GH Goose"; break;
+        case 37: info.name = "GH Bounty"; break;
+        case 42: info.name = "FP Goose"; break;
+        case 43: info.name = "Explore Goose"; break;
+        case 45: info.name = "Peasant"; break;
+        case 47: info.name = "Spectator"; break;
+        case 49: info.name = "Adventurer"; break;
+        case 50: info.name = "Avenger"; break;
+        case 52: info.name = "Undertaker"; break;
+        case 53: info.name = "Snoop"; break;
+        case 54: info.name = "Esper"; break;
+        case 55: info.name = "Invisibility"; break;
+        case 56: info.name = "Astral"; break;
+        case 61: info.name = "Engineer"; break;
+        case 63: info.name = "Street Urchin"; break;
+        case 64: info.name = "Tracker"; break;
+        case 67: info.name = "Preacher"; break;
+        case 68: info.name = "Inquisitor"; break;
+        case 69: info.name = "Saint"; break;
+        case 70: info.name = "High Priest"; break;
+        case 71: info.name = "Demon Hunter"; break;
+        case 72: info.name = "Initiate"; break;
+        case 73: info.name = "Seamstress"; break;
+        case 76: info.name = "TF Goose"; break;
+        case 77: info.name = "Chicken"; break;
+        case 78: info.name = "TLC Bodyguard"; break;
+        case 80: info.name = "TLC Undertaker"; break;
+        case 82: info.name = "Cupid"; break;
+        case 83: info.name = "Survivalist"; break;
+        case 86: info.name = "Drone"; break;
+        case 87: info.name = "Scientist"; break;
+        case 88: info.name = "HNS Role"; break;
+        case 89: info.name = "Owl"; break;
+        case 90: info.name = "Spotter"; break;
+        case 91: info.name = "HNS Sniper"; break;
+        case 92: info.name = "Lobbyist"; break;
+        case 93: info.name = "Lost Duckling"; break;
+        case 94: info.name = "Fortune Teller"; break;
+        case 95: info.name = "Mime"; break;
+        case 96: info.name = "Raven"; break;
+        case 97: info.name = "Rabbit"; break;
+        case 98: info.name = "Lucid Dreamer"; break;
+        case 99: info.name = "Clown"; break;
+        case 100: info.name = "Soldier"; break;
+        case 101: info.name = "Coroner"; break;
+        case 102: info.name = "Sensor"; break;
+        case 105: info.name = "Delusional"; break;
+        case 107: info.name = "AI"; break;
         default: info.name = "Unknown"; break;
     }
     info.color = COLOR_WHITE;
@@ -460,16 +529,33 @@ void ApplyDroneViewDelayed() {
     if (!localPlayerObject || !OverrideOrthographicSize) return;
     if (DroneView) {
         if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) { g_DroneViewDelay++; return; }
-        if (!g_DroneViewInitialized) { g_DroneViewInitialized = true; g_DroneViewReady = true; OverrideOrthographicSize(localPlayerObject, DroneZoom); }
-        else if (g_DroneViewReady) { OverrideOrthographicSize(localPlayerObject, DroneZoom); }
+        if (!g_DroneViewInitialized) { 
+            g_DroneViewInitialized = true; 
+            g_DroneViewReady = true; 
+            OverrideOrthographicSize(localPlayerObject, DroneZoom); 
+        }
+        else if (g_DroneViewReady) { 
+            OverrideOrthographicSize(localPlayerObject, DroneZoom); 
+        }
     }
 }
 
-void ResetDroneViewDelay() { g_DroneViewDelay = 0; g_DroneViewReady = false; g_DroneViewInitialized = false; g_ESPStabilized = false; g_FrameCount = 0; }
+void ResetDroneViewDelay() { 
+    g_DroneViewDelay = 0; 
+    g_DroneViewReady = false; 
+    g_DroneViewInitialized = false; 
+    g_ESPStabilized = false; 
+    g_FrameCount = 0; 
+}
 
 void DisableDroneView() {
-    if (localPlayerObject && OverrideOrthographicSize) OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
-    g_DroneViewReady = false; g_DroneViewInitialized = false; g_DroneViewDelay = 0; g_ESPStabilized = false; g_FrameCount = 0;
+    if (localPlayerObject && OverrideOrthographicSize) 
+        OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
+    g_DroneViewReady = false; 
+    g_DroneViewInitialized = false; 
+    g_DroneViewDelay = 0; 
+    g_ESPStabilized = false; 
+    g_FrameCount = 0;
 }
 
 void InitESP(JNIEnv *env) {
@@ -498,13 +584,17 @@ void UpdateScreenSize() {
 
 void SetESPEnabled(bool e) {
     JNIEnv* env = GetJNIEnv();
-    if (env && g_SetESPEnabledMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetESPEnabledMethod, (jboolean)e);
+    if (env && g_SetESPEnabledMethod) 
+        env->CallStaticVoidMethod(g_MenuClass, g_SetESPEnabledMethod, (jboolean)e);
 }
 
 void SendBatchESP(JNIEnv* env) {
     if (!env || !g_BatchDrawMethod) return;
     jstring jdata = env->NewStringUTF(g_ESPBatchBuffer);
-    if (jdata) { env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, jdata); env->DeleteLocalRef(jdata); }
+    if (jdata) { 
+        env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, jdata); 
+        env->DeleteLocalRef(jdata); 
+    }
 }
 
 inline bool WorldToScreen(Vector2 world, Vector2 camPos, float scale, float* sx, float* sy) {
@@ -544,17 +634,45 @@ bool ClipLine(float* x1, float* y1, float* x2, float* y2) {
     }
 }
 
-inline void GetEdgePosition(float sx, float sy, float* edgeX, float* edgeY) {
-    float cx = g_ScreenWidth * 0.5f, cy = g_ScreenHeight * 0.5f;
-    float dx = sx - cx, dy = sy - cy;
-    if (dx == 0 && dy == 0) { *edgeX = cx; *edgeY = cy; return; }
-    float padding = 100.0f, maxX = g_ScreenWidth - padding, minX = padding, maxY = g_ScreenHeight - padding, minY = padding;
-    float tX = (dx > 0) ? ((maxX - cx) / dx) : ((minX - cx) / dx);
-    float tY = (dy > 0) ? ((maxY - cy) / dy) : ((minY - cy) / dy);
-    float t = fminf(fabsf(tX), fabsf(tY)); if (t > 1) t = 1;
-    *edgeX = cx + dx * t; *edgeY = cy + dy * t;
-    if (*edgeX < minX) *edgeX = minX; else if (*edgeX > maxX) *edgeX = maxX;
-    if (*edgeY < minY) *edgeY = minY; else if (*edgeY > maxY) *edgeY = maxY;
+inline void GetEdgePosition(float targetX, float targetY, float playerX, float playerY, float* edgeX, float* edgeY) {
+    float padding = 60.0f;
+    float minX = padding, maxX = g_ScreenWidth - padding;
+    float minY = padding, maxY = g_ScreenHeight - padding;
+    
+    float dx = targetX - playerX;
+    float dy = targetY - playerY;
+    
+    if (dx == 0 && dy == 0) {
+        *edgeX = playerX;
+        *edgeY = playerY;
+        return;
+    }
+    
+    float t = 1.0f;
+    
+    if (dx > 0) {
+        float tX = (maxX - playerX) / dx;
+        if (tX > 0 && tX < t) t = tX;
+    } else if (dx < 0) {
+        float tX = (minX - playerX) / dx;
+        if (tX > 0 && tX < t) t = tX;
+    }
+    
+    if (dy > 0) {
+        float tY = (maxY - playerY) / dy;
+        if (tY > 0 && tY < t) t = tY;
+    } else if (dy < 0) {
+        float tY = (minY - playerY) / dy;
+        if (tY > 0 && tY < t) t = tY;
+    }
+    
+    *edgeX = playerX + dx * t;
+    *edgeY = playerY + dy * t;
+    
+    if (*edgeX < minX) *edgeX = minX;
+    else if (*edgeX > maxX) *edgeX = maxX;
+    if (*edgeY < minY) *edgeY = minY;
+    else if (*edgeY > maxY) *edgeY = maxY;
 }
 
 void AutoCompleteAllTasks() {
@@ -583,6 +701,23 @@ void CheckAutoTask() {
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_LastAutoTaskTime).count();
     if (elapsed >= 100) { AutoCompleteAllTasks(); g_LastAutoTaskTime = now; }
+}
+
+void ApplyNoClip(void* instance, bool enable) {
+    if (!instance) return;
+    
+    void* playerCollider = *(void**)((uintptr_t)instance + OFFSET_PE_PLAYERCOLLIDER);
+    void* confineCollider = *(void**)((uintptr_t)instance + OFFSET_PE_CONFINECOLLIDER);
+    void* wallCollisionHandler = *(void**)((uintptr_t)instance + OFFSET_PE_WALLCOLLISIONHANDLER);
+    
+    if (Collider2D_set_isTrigger) {
+        if (playerCollider) Collider2D_set_isTrigger(playerCollider, enable);
+        if (confineCollider) Collider2D_set_isTrigger(confineCollider, enable);
+    }
+    
+    if (wallCollisionHandler) {
+        *(bool*)((uintptr_t)wallCollisionHandler + OFFSET_WCCH_INWALL) = false;
+    }
 }
 
 void CollectPlayerDataFromInstance(void* instance, PlayerData* p, Vector2 camPos) {
@@ -645,6 +780,9 @@ void RenderDebugPanelBatch() {
     BatchAddText(centerX, startY, buf, COLOR_YELLOW); startY += lineHeight;
 
     snprintf(buf, sizeof(buf), "InGame:%c | Lobby:%c | Vote:%c | Spotlight:%c | Players:%d | Dead:%d", isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', isInVotingScreen ? 'Y' : 'N', isInSpotlightScreen ? 'Y' : 'N', g_RenderPlayerCount, g_DeadPlayersCount);
+    BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
+
+    snprintf(buf, sizeof(buf), "NoClip:%c", NoClip ? 'Y' : 'N');
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
     RoleInfo myRole = GetRoleInfo(localPlayerRole);
@@ -739,7 +877,8 @@ void RenderESPBatch() {
                 BatchAddText(sx, nameY, p->name, color);
             }
         } else if (ESPEdgeIndicator) {
-            float edgeX, edgeY; GetEdgePosition(sx, sy, &edgeX, &edgeY);
+            float edgeX, edgeY; 
+            GetEdgePosition(sx, sy, playerSx, playerSy, &edgeX, &edgeY);
             BatchAddBox(edgeX - 8, edgeY - 8, 16, 16, color);
             int iconCount = 0; if (p->isInfected) iconCount++; if (p->hasBomb) iconCount++;
             float iconX = edgeX - 70 - (iconCount * 20), iconY = edgeY - 25;
@@ -770,12 +909,7 @@ void ClearAllESP() {
 
 void RefreshPlayerDataAndRender() {
     if (!g_ESPReady) return;
-    if (isInSpotlightScreen) {
-        BatchClear();
-        JNIEnv* env = GetJNIEnv();
-        if (env) SendBatchESP(env);
-        return;
-    }
+    if (isInSpotlightScreen) { BatchClear(); JNIEnv* env = GetJNIEnv(); if (env) SendBatchESP(env); return; }
 
     Vector2 camPos = GetCameraPosition2D();
     g_LocalPlayerPos = localPlayerInstance ? GetPlayerPosition(localPlayerInstance, true) : g_LocalPlayerPos;
@@ -802,13 +936,7 @@ void RefreshPlayerDataAndRender() {
 
 int (*old_get_deadPlayersCount)() = NULL;
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43A79D8 (TypeDefIndex: 20422)
- * ============================================================================
- */
+// CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43B004C
 void (*old_StateCameraUpdate)(void* instance, Vector3 worldUp, float deltaTime);
 void StateCameraUpdate(void* instance, Vector3 worldUp, float deltaTime) {
     old_StateCameraUpdate(instance, worldUp, deltaTime);
@@ -820,13 +948,7 @@ void StateCameraUpdate(void* instance, Vector3 worldUp, float deltaTime) {
     }
 }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * PlayableEntity.Update - RVA: 0x3DC28D8 (TypeDefIndex: 6285)
- * ============================================================================
- */
+// PlayableEntity.Update - RVA: 0x3DCAEB0
 void (*old_Update)(void *instance);
 void Update(void *instance) {
     if (instance) {
@@ -844,6 +966,7 @@ void Update(void *instance) {
             GetKilledBy(instance, g_LocalKilledBy, sizeof(g_LocalKilledBy));
             if (old_get_deadPlayersCount) g_DeadPlayersCount = old_get_deadPlayersCount();
             if (UnlimitedVision) *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
+            if (NoClip) ApplyNoClip(instance, true);
             if (btnSetPosition) { SavedPosX = g_LocalPlayerPos.x; SavedPosY = g_LocalPlayerPos.y; TeleportX = g_LocalPlayerPos.x; TeleportY = g_LocalPlayerPos.y; btnSetPosition = false; LOGI("Position saved: %.2f, %.2f", SavedPosX, SavedPosY); }
             if (btnTeleport && TeleportTo) { Vector2 targetPos = {TeleportX, TeleportY}; TeleportTo(instance, targetPos, true); btnTeleport = false; LOGI("Teleported to: %.2f, %.2f", TeleportX, TeleportY); }
             if (btnCallEmergency && PlayerController_CallEmergency) { PlayerController_CallEmergency(instance); btnCallEmergency = false; LOGI("Emergency called"); }
@@ -859,38 +982,18 @@ void Update(void *instance) {
     old_Update(instance);
 }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * PlayableEntity.LateUpdate - RVA: 0x3DC368C (TypeDefIndex: 6285)
- * ============================================================================
- */
+// PlayableEntity.LateUpdate - RVA: 0x3DCBC64
 void (*old_LateUpdate)(void *instance);
-void LateUpdate(void *instance) {
-    old_LateUpdate(instance);
-}
+void LateUpdate(void *instance) { old_LateUpdate(instance); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (TypeDefIndex: 6285)
- * ============================================================================
- */
+// PlayableEntity.TurnIntoGhost - RVA: 0x3DD69F8
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
 void TurnIntoGhost(void *instance, int deathReason) {
     if (AntiDeath && instance == localPlayerInstance) return;
     old_TurnIntoGhost(instance, deathReason);
 }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * LocalPlayer.Update - RVA: 0x3D986B8 (TypeDefIndex: 6261)
- * ============================================================================
- */
+// LocalPlayer.Update - RVA: 0x3DA0C18
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
     old_LocalPlayer_Update(instance);
@@ -909,114 +1012,70 @@ void LocalPlayer_Update(void *instance) {
     }
 }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (TypeDefIndex: 6261)
- * ============================================================================
- */
+// LocalPlayer.GetPlayerSpeed - RVA: 0x3DAFD40
 float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
     float speed = old_GetPlayerSpeed(instance);
     return SpeedHack ? speed * SpeedMultiplier : speed;
 }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * GGDRole.OnEnterVent - RVA: 0x3C55C94 (TypeDefIndex: 5656)
- * ============================================================================
- */
+// GGDRole.OnEnterVent - RVA: 0x3C5CCF0
 void (*old_OnEnterVent)(void *instance, void* vent, bool setCooldown);
 void OnEnterVent(void *instance, void* vent, bool setCooldown) { old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * GGDRole.OnExitVent - RVA: 0x3C55D88 (TypeDefIndex: 5656)
- * ============================================================================
- */
+// GGDRole.OnExitVent - RVA: 0x3C5CDE4
 void (*old_OnExitVent)(void *instance, void* vent, bool setCooldown);
 void OnExitVent(void *instance, void* vent, bool setCooldown) { old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * GGDRole.SetVentCooldown - RVA: 0x3C548AC (TypeDefIndex: 5656)
- * ============================================================================
- */
+// GGDRole.SetVentCooldown - RVA: 0x3C5B908
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) { old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * PlayableEntity.Despawn - RVA: 0x3DC5328 (TypeDefIndex: 6285)
- * ============================================================================
- */
+// PlayableEntity.Despawn - RVA: 0x3DCD900
 void (*old_Despawn)(void *instance);
 void Despawn(void *instance) {
-    if (instance) { bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL); if (isLocal) ClearAllESP(); }
+    if (instance) { 
+        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL); 
+        if (isLocal) { 
+            if (NoClip) ApplyNoClip(instance, false); 
+            ClearAllESP(); 
+        } 
+    }
     old_Despawn(instance);
 }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * TasksHandler.OnEnable - RVA: 0x3D8CC74 (TypeDefIndex: 6235)
- * ============================================================================
- */
+// TasksHandler.OnEnable - RVA: 0x3D951D4
 void (*old_TasksHandler_OnEnable)(void* instance);
 void TasksHandler_OnEnable(void* instance) { if (instance) g_TasksHandler = instance; old_TasksHandler_OnEnable(instance); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * TasksHandler.OnDisable - RVA: 0x3D8CD7C (TypeDefIndex: 6235)
- * ============================================================================
- */
+// TasksHandler.OnDisable - RVA: 0x3D952DC
 void (*old_TasksHandler_OnDisable)(void* instance);
 void TasksHandler_OnDisable(void* instance) { if (instance == g_TasksHandler) g_TasksHandler = NULL; old_TasksHandler_OnDisable(instance); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * RoofHandler.Awake - RVA: 0x3D3767C (TypeDefIndex: 6100)
- * ============================================================================
- */
+// RoofHandler.Awake - RVA: 0x3D3F618
 void (*old_RoofHandler_Awake)(void* instance);
 void RoofHandler_Awake(void* instance) { if (instance) g_RoofHandler = instance; old_RoofHandler_Awake(instance); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * RoofHandler.OnDestroy - RVA: 0x3D37780 (TypeDefIndex: 6100)
- * ============================================================================
- */
+// RoofHandler.OnDestroy - RVA: 0x3D3F71C
 void (*old_RoofHandler_OnDestroy)(void* instance);
 void RoofHandler_OnDestroy(void* instance) { if (instance == g_RoofHandler) { g_RoofHandler = NULL; g_RoofRemovedThisRound = false; } old_RoofHandler_OnDestroy(instance); }
 
-/*
- * ============================================================================
- * HOOK KAYNAKLARI
- * ============================================================================
- * LocalPlayer.StartRound - RVA: 0x3D9FD58 (TypeDefIndex: 6261)
- * ============================================================================
- */
+// LocalPlayer.StartRound - RVA: 0x3DA8330
 void (*old_LocalPlayer_StartRound)(void* instance, bool isFirstRound);
 void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
     g_RoofRemovedThisRound = false;
     if (RemoveRoof && g_RoofHandler && RoofHandler_DeactivateRoofs) { RoofHandler_DeactivateRoofs(g_RoofHandler, true); g_RoofRemovedThisRound = true; }
     old_LocalPlayer_StartRound(instance, isFirstRound);
+}
+
+// WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x379F624
+void (*old_WallCollisionCheckHandler_OnCollisionEnter2D)(void* instance, void* collision);
+void WallCollisionCheckHandler_OnCollisionEnter2D(void* instance, void* collision) {
+    if (NoClip) {
+        if (instance) *(bool*)((uintptr_t)instance + OFFSET_WCCH_INWALL) = false;
+        return;
+    }
+    old_WallCollisionCheckHandler_OnCollisionEnter2D(instance, collision);
 }
 
 jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
@@ -1027,7 +1086,8 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
         OBFUSCATE("Toggle_[\uF577]Remove Roof"),
         OBFUSCATE("Toggle_[\uF210]No Vent Cooldown"),
         OBFUSCATE("Toggle_[\uEDB4]See Ghosts"),
-        OBFUSCATE("Category_[\uF605]Camera"),
+        OBFUSCATE("Category_[\uF605]Movement"),
+        OBFUSCATE("Toggle_[\uEFB0]No Clip"),
         OBFUSCATE("Toggle_[\uF2DA]Drone View"),
         OBFUSCATE("SeekBar_[\uF403]Zoom Level_5_25"),
         OBFUSCATE("Category_[\uF04B]ESP Settings"),
@@ -1072,26 +1132,27 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 1: RemoveRoof = boolean; if (boolean && g_RoofHandler && RoofHandler_DeactivateRoofs && !g_RoofRemovedThisRound) { RoofHandler_DeactivateRoofs(g_RoofHandler, true); g_RoofRemovedThisRound = true; } else if (!boolean && g_RoofHandler && RoofHandler_DeactivateRoofs) { RoofHandler_DeactivateRoofs(g_RoofHandler, false); g_RoofRemovedThisRound = false; } break;
         case 2: NoCooldown = boolean; break;
         case 3: SeeGhosts = boolean; if (!boolean && localPlayerObject && SetCanSeeGhosts) SetCanSeeGhosts(localPlayerObject, false); break;
-        case 4: DroneView = boolean; if (!boolean) DisableDroneView(); else ResetDroneViewDelay(); break;
-        case 5: DroneZoom = (float)value; if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize) OverrideOrthographicSize(localPlayerObject, DroneZoom); break;
-        case 6: ESPEnabled = boolean; if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; } SetESPEnabled(boolean || DebugMode); break;
-        case 7: ESPLines = boolean; break;
-        case 8: ESPBox = boolean; break;
-        case 9: ESPDistance = boolean; break;
-        case 10: ESPName = boolean; break;
-        case 11: ESPEdgeIndicator = boolean; break;
-        case 12: ESPHideInVote = boolean; break;
-        case 13: ESPHideInLobby = boolean; break;
-        case 14: TeleportX = (float)value; break;
-        case 15: TeleportY = (float)value; break;
-        case 16: btnSetPosition = true; break;
-        case 17: btnTeleport = true; break;
-        case 18: AutoTaskComplete = boolean; if (boolean) g_LastAutoTaskTime = std::chrono::steady_clock::now(); break;
-        case 19: btnCallEmergency = true; break;
-        case 20: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
-        case 21: AntiDeath = boolean; break;
-        case 22: SpeedHack = boolean; break;
-        case 23: SpeedMultiplier = (float)value / 10.0f; break;
+        case 4: NoClip = boolean; if (localPlayerInstance) ApplyNoClip(localPlayerInstance, boolean); break;
+        case 5: DroneView = boolean; if (!boolean) DisableDroneView(); else ResetDroneViewDelay(); break;
+        case 6: DroneZoom = (float)value; if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize) OverrideOrthographicSize(localPlayerObject, DroneZoom); break;
+        case 7: ESPEnabled = boolean; if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; } SetESPEnabled(boolean || DebugMode); break;
+        case 8: ESPLines = boolean; break;
+        case 9: ESPBox = boolean; break;
+        case 10: ESPDistance = boolean; break;
+        case 11: ESPName = boolean; break;
+        case 12: ESPEdgeIndicator = boolean; break;
+        case 13: ESPHideInVote = boolean; break;
+        case 14: ESPHideInLobby = boolean; break;
+        case 15: TeleportX = (float)value; break;
+        case 16: TeleportY = (float)value; break;
+        case 17: btnSetPosition = true; break;
+        case 18: btnTeleport = true; break;
+        case 19: AutoTaskComplete = boolean; if (boolean) g_LastAutoTaskTime = std::chrono::steady_clock::now(); break;
+        case 20: btnCallEmergency = true; break;
+        case 21: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
+        case 22: AntiDeath = boolean; break;
+        case 23: SpeedHack = boolean; break;
+        case 24: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -1104,57 +1165,80 @@ void hack_thread() {
     LOGI("%s loaded", (const char*)targetLibName);
     void* il2cppHandle = dlopen("libil2cpp.so", RTLD_NOW);
     if (il2cppHandle) { il2cpp_string_new_func = (il2cpp_string_new_t)dlsym(il2cppHandle, "il2cpp_string_new"); LOGI("il2cpp_string_new: %p", il2cpp_string_new_func); }
+
 #if defined(__aarch64__)
-    /*
-     * ============================================================================
-     * HOOK RVA KAYNAKLARI
-     * ============================================================================
-     * PlayableEntity.Update - RVA: 0x3DC28D8 (TypeDefIndex: 6285)
-     * PlayableEntity.LateUpdate - RVA: 0x3DC368C (TypeDefIndex: 6285)
-     * PlayableEntity.TurnIntoGhost - RVA: 0x3DCE370 (TypeDefIndex: 6285)
-     * PlayableEntity.Despawn - RVA: 0x3DC5328 (TypeDefIndex: 6285)
-     * LocalPlayer.Update - RVA: 0x3D986B8 (TypeDefIndex: 6261)
-     * LocalPlayer.GetPlayerSpeed - RVA: 0x3DA7768 (TypeDefIndex: 6261)
-     * LocalPlayer.StartRound - RVA: 0x3D9FD58 (TypeDefIndex: 6261)
-     * LocalPlayer.OverrideOrthographicSize - RVA: 0x3DA813C (TypeDefIndex: 6261)
-     * LocalPlayer.SetCanSeeGhosts - RVA: 0x3DAF83C (TypeDefIndex: 6261)
-     * PlayableEntity.TeleportTo - RVA: 0x3DD33EC (TypeDefIndex: 6285)
-     * GGDRole.OnEnterVent - RVA: 0x3C55C94 (TypeDefIndex: 5656)
-     * GGDRole.OnExitVent - RVA: 0x3C55D88 (TypeDefIndex: 5656)
-     * GGDRole.SetVentCooldown - RVA: 0x3C548AC (TypeDefIndex: 5656)
-     * TasksHandler.OnEnable - RVA: 0x3D8CC74 (TypeDefIndex: 6235)
-     * TasksHandler.OnDisable - RVA: 0x3D8CD7C (TypeDefIndex: 6235)
-     * TasksHandler.CompleteTask - RVA: 0x3D889C4 (TypeDefIndex: 6235)
-     * TasksHandler.UpdateTaskVisuals - RVA: 0x3D908DC (TypeDefIndex: 6235)
-     * RoofHandler.Awake - RVA: 0x3D3767C (TypeDefIndex: 6100)
-     * RoofHandler.OnDestroy - RVA: 0x3D37780 (TypeDefIndex: 6100)
-     * RoofHandler.DeactivateRoofs - RVA: 0x3D3798C (TypeDefIndex: 6100)
-     * PlayerController.CallEmergency - RVA: 0x3DE40FC (TypeDefIndex: 6283)
-     * CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43A79D8 (TypeDefIndex: 20422)
-     * ============================================================================
-     */
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC28D8")), Update, old_Update);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC368C")), LateUpdate, old_LateUpdate);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCE370")), TurnIntoGhost, old_TurnIntoGhost);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DC5328")), Despawn, old_Despawn);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D986B8")), LocalPlayer_Update, old_LocalPlayer_Update);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA7768")), GetPlayerSpeed, old_GetPlayerSpeed);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D9FD58")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x43A79D8")), StateCameraUpdate, old_StateCameraUpdate);
-    OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DA813C")));
-    TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DD33EC")));
-    SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DAF83C")));
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55C94")), OnEnterVent, old_OnEnterVent);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C55D88")), OnExitVent, old_OnExitVent);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C548AC")), SetVentCooldown, old_SetVentCooldown);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8CC74")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8CD7C")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
-    TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D889C4")));
-    TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D908DC")));
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D3767C")), RoofHandler_Awake, old_RoofHandler_Awake);
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D37780")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
-    RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D3798C")));
-    PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DE40FC")));
+    // PlayableEntity.Update - RVA: 0x3DCAEB0
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCAEB0")), Update, old_Update);
+    
+    // PlayableEntity.LateUpdate - RVA: 0x3DCBC64
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCBC64")), LateUpdate, old_LateUpdate);
+    
+    // PlayableEntity.TurnIntoGhost - RVA: 0x3DD69F8
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DD69F8")), TurnIntoGhost, old_TurnIntoGhost);
+    
+    // PlayableEntity.Despawn - RVA: 0x3DCD900
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCD900")), Despawn, old_Despawn);
+    
+    // LocalPlayer.Update - RVA: 0x3DA0C18
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA0C18")), LocalPlayer_Update, old_LocalPlayer_Update);
+    
+    // LocalPlayer.GetPlayerSpeed - RVA: 0x3DAFD40
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DAFD40")), GetPlayerSpeed, old_GetPlayerSpeed);
+    
+    // LocalPlayer.StartRound - RVA: 0x3DA8330
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA8330")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
+    
+    // CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43B004C
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x43B004C")), StateCameraUpdate, old_StateCameraUpdate);
+    
+    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3DB0714
+    OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DB0714")));
+    
+    // PlayableEntity.TeleportTo - RVA: 0x3DDBA74
+    TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DDBA74")));
+    
+    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3DB7E14
+    SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DB7E14")));
+    
+    // GGDRole.OnEnterVent - RVA: 0x3C5CCF0
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C5CCF0")), OnEnterVent, old_OnEnterVent);
+    
+    // GGDRole.OnExitVent - RVA: 0x3C5CDE4
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C5CDE4")), OnExitVent, old_OnExitVent);
+    
+    // GGDRole.SetVentCooldown - RVA: 0x3C5B908
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C5B908")), SetVentCooldown, old_SetVentCooldown);
+    
+    // TasksHandler.OnEnable - RVA: 0x3D951D4
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D951D4")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
+    
+    // TasksHandler.OnDisable - RVA: 0x3D952DC
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D952DC")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
+    
+    // TasksHandler.CompleteTask - RVA: 0x3D90F24
+    TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D90F24")));
+    
+    // TasksHandler.UpdateTaskVisuals - RVA: 0x3D98E3C
+    TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D98E3C")));
+    
+    // RoofHandler.Awake - RVA: 0x3D3F618
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D3F618")), RoofHandler_Awake, old_RoofHandler_Awake);
+    
+    // RoofHandler.OnDestroy - RVA: 0x3D3F71C
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D3F71C")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
+    
+    // RoofHandler.DeactivateRoofs - RVA: 0x3D3F928
+    RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D3F928")));
+    
+    // PlayerController.CallEmergency - RVA: 0x3DEC758
+    PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DEC758")));
+    
+    // Collider2D.set_isTrigger - RVA: 0x74A4DE0
+    Collider2D_set_isTrigger = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x74A4DE0")));
+    
+    // WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x379F624
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x379F624")), WallCollisionCheckHandler_OnCollisionEnter2D, old_WallCollisionCheckHandler_OnCollisionEnter2D);
+    
     LOGI("All hooks installed!");
 #endif
     LOGI("Done");
