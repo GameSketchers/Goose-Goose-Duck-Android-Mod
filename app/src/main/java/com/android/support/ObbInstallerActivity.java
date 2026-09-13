@@ -45,21 +45,20 @@ public class ObbInstallerActivity extends Activity {
     private static final int STATE_OFF = Color.parseColor("#FFE08080");
     private static final int BORDER_ACCENT = Color.parseColor("#44D4A5C9");
 
-    //================== REMIX ICON CODES ==================//
-    private static final String ICON_DOWNLOAD = "\uECD8";
-    private static final String ICON_CHECK = "\uEB7B";
-    private static final String ICON_CLOSE = "\uEB99";
-    private static final String ICON_FOLDER = "\uED6A";
-    private static final String ICON_FILE = "\uECEB";
-    private static final String ICON_GAMEPAD = "\uEDAB";
-    private static final String ICON_LOADING = "\uEEC6";  // loader-4-line
-    private static final String ICON_SUCCESS = "\uF438";  // checkbox-circle-line
-    private static final String ICON_ERROR = "\uF3B6";    // close-circle-line
-    private static final String ICON_INFO = "\uF448";
-    private static final String ICON_ROCKET = "\uF094";
+    private static final String ICON_DOWNLOAD = "\uE232";  // file-arrow-down
+    private static final String ICON_CHECK    = "\uE184";  // check-circle
+    private static final String ICON_CLOSE    = "\uE4F6";  // x
+    private static final String ICON_FOLDER   = "\uE24A";  // folder
+    private static final String ICON_FILE     = "\uE230";  // file
+    private static final String ICON_GAMEPAD  = "\uE26E";  // game-controller
+    private static final String ICON_LOADING  = "\uE66A";  // spinner
+    private static final String ICON_SUCCESS  = "\uE606";  // seal-check
+    private static final String ICON_ERROR    = "\uE4E2";  // warning-circle
+    private static final String ICON_INFO     = "\uE2CE";  // info
+    private static final String ICON_ROCKET   = "\uE3FC";  // rocket
 
     //================== OBB ==================//
-    private static final String OBB_FILE_NAME = "main.200531.com.Gaggle.fun.GooseGooseDuck.obb";
+    private static final String OBB_FILE_NAME = "main.200561.com.Gaggle.fun.GooseGooseDuck.obb";
 
     //================== ICON (Base64) ==================//
     // Buraya kendi base64 resminizi yapıştırın (data:image/png;base64, kısmı OLMADAN veya İLE)
@@ -123,7 +122,7 @@ public class ObbInstallerActivity extends Activity {
     private void loadFonts() {
         try {
             menuFont = Typeface.createFromAsset(getAssets(), "fonts/MPLUSRounded1c-Medium.ttf");
-            iconFont = Typeface.createFromAsset(getAssets(), "fonts/remixicon.ttf");
+            iconFont = Typeface.createFromAsset(getAssets(), "fonts/Phosphor-Bold.ttf");
             fontsLoaded = true;
         } catch (Exception e) {
             menuFont = Typeface.create("sans-serif-medium", Typeface.NORMAL);

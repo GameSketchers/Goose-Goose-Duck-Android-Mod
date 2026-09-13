@@ -175,7 +175,7 @@ public class Menu {
     private void loadFonts(Context context) {
         try {
             menuFont = Typeface.createFromAsset(context.getAssets(), "fonts/MPLUSRounded1c-Medium.ttf");
-            iconFont = Typeface.createFromAsset(context.getAssets(), "fonts/remixicon.ttf");
+            iconFont = Typeface.createFromAsset(context.getAssets(), "fonts/Phosphor-Bold.ttf");
             fontsLoaded = true;
         } catch (Exception e) {
             menuFont = Typeface.create("sans-serif-medium", Typeface.NORMAL);
@@ -436,7 +436,7 @@ public class Menu {
         title.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
 
         final TextView settingsBtn = new TextView(context);
-        settingsBtn.setText("\uF0EA");
+        settingsBtn.setText("\uE270");
         settingsBtn.setTextColor(ACCENT_PURPLE);
         settingsBtn.setTextSize(22f);
         settingsBtn.setTypeface(iconFont);
@@ -456,7 +456,7 @@ public class Menu {
 								scrollView.animate().alpha(1f).setDuration(150).start();
 							}
 						}).start();
-					settingsBtn.setText(isSettings ? "\uF5D5" : "\uF0EA");
+                    settingsBtn.setText(isSettings ? "\uE014" : "\uE270");
 				}
 			});
 
@@ -509,7 +509,7 @@ public class Menu {
         hideBtn.setBackground(hideBg);
 
         TextView hideIcon = new TextView(context);
-        hideIcon.setText("\uECB2");
+        hideIcon.setText("\uE222");
         hideIcon.setTextColor(TEXT_SECONDARY);
         hideIcon.setTextSize(14f);
         hideIcon.setTypeface(iconFont);
@@ -568,7 +568,7 @@ public class Menu {
         }
 
         TextView closeIcon = new TextView(context);
-        closeIcon.setText("\uEB98");
+        closeIcon.setText("\uE4F6");
         closeIcon.setTextColor(BG_PRIMARY);
         closeIcon.setTextSize(14f);
         closeIcon.setTypeface(iconFont);
@@ -1731,7 +1731,7 @@ public class Menu {
         cancelBtn.setBackground(cBg);
 
         TextView cancelIcon = new TextView(getContext);
-        cancelIcon.setText("\uEB98");
+        cancelIcon.setText("\uE4F6");
         cancelIcon.setTextColor(TEXT_SECONDARY);
         cancelIcon.setTextSize(14f);
         cancelIcon.setTypeface(iconFont);

@@ -90,7 +90,7 @@ struct Quaternion { float x, y, z, w; };
 #define COLOR_CRIMSON  0xFFDC143C
 #define COLOR_TEAL     0xFF008080
 
-// PlayableEntity (TypeDefIndex: 6298)
+// PlayableEntity (TypeDefIndex: 6378)
 #define OFFSET_PE_ENTITYNUMBER       0x88
 #define OFFSET_PE_NICKNAME           0x90
 #define OFFSET_PE_ISLOCAL            0x98
@@ -112,16 +112,16 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_ISINPELICAN        0x18D
 #define OFFSET_PE_ISMORPHED          0x18F
 #define OFFSET_PE_ISSPECTATOR        0x200
-#define OFFSET_PE_RIGIDBODY          0x2B8
-#define OFFSET_PE_TRANSFORMVIEW      0x2C0
-#define OFFSET_PE_BODYCOLLIDER       0x2D0
-#define OFFSET_PE_PLAYERCOLLIDER     0x2D8
-#define OFFSET_PE_WALLCHECKCOLLIDER  0x2E0
-#define OFFSET_PE_WALLCOLLISIONHANDLER 0x2E8
-#define OFFSET_PE_CONFINECOLLIDER    0x2F0
+#define OFFSET_PE_RIGIDBODY          0x2C0
+#define OFFSET_PE_TRANSFORMVIEW      0x2C8
+#define OFFSET_PE_BODYCOLLIDER       0x2D8
+#define OFFSET_PE_PLAYERCOLLIDER     0x2E0
+#define OFFSET_PE_WALLCHECKCOLLIDER  0x2E8
+#define OFFSET_PE_WALLCOLLISIONHANDLER 0x2F0
+#define OFFSET_PE_CONFINECOLLIDER    0x2F8
 #define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
 
-// LocalPlayer (TypeDefIndex: 6274)
+// LocalPlayer (TypeDefIndex: 6353)
 #define OFFSET_LP_MAINCAMERA              0x78
 #define OFFSET_LP_STATECAMERA             0x80
 #define OFFSET_LP_SCRIPTABLESTATE         0x88
@@ -131,25 +131,25 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_LP_INGAMEENDSPOTLIGHT      0xC6
 #define OFFSET_LP_CANSEEGHOSTS            0x150
 
-// BetterPhotonTransformView (TypeDefIndex: 1968)
+// BetterPhotonTransformView (TypeDefIndex: 2006)
 #define OFFSET_TV_LATESTPOS          0x30
 #define OFFSET_TV_LASTTRANSFORMPOS   0x38
 
-// CinemachineStateDrivenCamera (TypeDefIndex: 20435)
+// CinemachineStateDrivenCamera (TypeDefIndex: 20517)
 #define OFFSET_CSDC_STATE            0x108
 #define OFFSET_CS_RAWPOSITION        0x4C
 
-// GGDRole (TypeDefIndex: 5665)
-#define OFFSET_ROLE_TYPE             0x12
+// GGDRole (TypeDefIndex: 5730)
+#define OFFSET_ROLE_TYPE             0x10
 
-// TasksHandler (TypeDefIndex: 6248)
+// TasksHandler (TypeDefIndex: 6327)
 #define OFFSET_TH_SORTEDASSIGNEDTASKS  0x38
 
-// GameTask (TypeDefIndex: 5581)
+// GameTask (TypeDefIndex: 5642)
 #define OFFSET_GT_TASKID             0x10
 #define OFFSET_GT_ISFAKETASK         0xD1
 
-// WallCollisionCheckHandler (TypeDefIndex: 1076)
+// WallCollisionCheckHandler (TypeDefIndex: 1096)
 #define OFFSET_WCCH_INWALL           0x20
 
 struct PlayerInfo {
@@ -220,13 +220,13 @@ inline void BatchClear() {
 inline void BatchAddLine(float x1, float y1, float x2, float y2, int color) {
     if (g_ESPBatchOffset >= MAX_ESP_BUFFER - 64) return;
     g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
-        "L%.0f,%.0f,%.0f,%.0f,%d;", x1, y1, x2, y2, color);
+                                 "L%.0f,%.0f,%.0f,%.0f,%d;", x1, y1, x2, y2, color);
 }
 
 inline void BatchAddBox(float x, float y, float w, float h, int color) {
     if (g_ESPBatchOffset >= MAX_ESP_BUFFER - 64) return;
     g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
-        "B%.0f,%.0f,%.0f,%.0f,%d;", x, y, w, h, color);
+                                 "B%.0f,%.0f,%.0f,%.0f,%d;", x, y, w, h, color);
 }
 
 inline void BatchAddText(float x, float y, const char* text, int color) {
@@ -239,13 +239,13 @@ inline void BatchAddText(float x, float y, const char* text, int color) {
     }
     safeText[j] = '\0';
     g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
-        "T%.0f,%.0f,%s,%d;", x, y, safeText, color);
+                                 "T%.0f,%.0f,%s,%d;", x, y, safeText, color);
 }
 
 inline void BatchAddIcon(float x, float y, const char* icon, int color) {
     if (!icon || g_ESPBatchOffset >= MAX_ESP_BUFFER - 64) return;
     g_ESPBatchOffset += snprintf(g_ESPBatchBuffer + g_ESPBatchOffset, MAX_ESP_BUFFER - g_ESPBatchOffset,
-        "I%.0f,%.0f,%s,%d;", x, y, icon, color);
+                                 "I%.0f,%.0f,%s,%d;", x, y, icon, color);
 }
 
 JavaVM* g_JavaVM = NULL;
@@ -256,28 +256,28 @@ jmethodID g_GetScreenWidthMethod = NULL;
 jmethodID g_GetScreenHeightMethod = NULL;
 bool g_ESPReady = false;
 
-// LocalPlayer.OverrideOrthographicSize - RVA: 0x3DB0714
+// LocalPlayer.OverrideOrthographicSize - RVA: 0x3E2A72C
 void (*OverrideOrthographicSize)(void*, float) = NULL;
 
-// PlayableEntity.TeleportTo - RVA: 0x3DDBA74
+// PlayableEntity.TeleportTo - RVA: 0x3E462D8
 void (*TeleportTo)(void*, Vector2, bool) = NULL;
 
-// LocalPlayer.SetCanSeeGhosts - RVA: 0x3DB7E14
+// LocalPlayer.SetCanSeeGhosts - RVA: 0x3E32074
 void (*SetCanSeeGhosts)(void*, bool) = NULL;
 
-// TasksHandler.CompleteTask - RVA: 0x3D90F24
+// TasksHandler.CompleteTask - RVA: 0x3E09EEC
 void (*TasksHandler_CompleteTask)(void*, void*, bool, bool, bool, bool) = NULL;
 
-// TasksHandler.UpdateTaskVisuals - RVA: 0x3D98E3C
+// TasksHandler.UpdateTaskVisuals - RVA: 0x3E13FA8
 void (*TasksHandler_UpdateTaskVisuals)(void*) = NULL;
 
-// RoofHandler.DeactivateRoofs - RVA: 0x3D3F928
+// RoofHandler.DeactivateRoofs - RVA: 0x3DA5218
 void (*RoofHandler_DeactivateRoofs)(void*, bool) = NULL;
 
-// PlayerController.CallEmergency - RVA: 0x3DEC758
+// PlayerController.CallEmergency - RVA: 0x3E57E9C
 void (*PlayerController_CallEmergency)(void*) = NULL;
 
-// Collider2D.set_isTrigger - RVA: 0x74A4DE0
+// Collider2D.set_isTrigger - RVA: 0x75320A8
 void (*Collider2D_set_isTrigger)(void*, bool) = NULL;
 
 typedef void* (*il2cpp_string_new_t)(const char*);
@@ -308,9 +308,9 @@ void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen)
     for (int i = 0; i < length && outIdx < maxLen - 4; i++) {
         uint16_t c = chars[i];
         if (c < 0x80) { if (c >= 0x20) outName[outIdx++] = (char)c; }
-        else if (c < 0x800) { 
-            outName[outIdx++] = (char)(0xC0 | (c >> 6)); 
-            outName[outIdx++] = (char)(0x80 | (c & 0x3F)); 
+        else if (c < 0x800) {
+            outName[outIdx++] = (char)(0xC0 | (c >> 6));
+            outName[outIdx++] = (char)(0x80 | (c & 0x3F));
         }
         else if (c >= 0xD800 && c <= 0xDBFF) {
             if (i + 1 < length) {
@@ -324,12 +324,12 @@ void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen)
                     i++;
                 }
             }
-        } 
+        }
         else if (c >= 0xDC00 && c <= 0xDFFF) { continue; }
-        else { 
-            outName[outIdx++] = (char)(0xE0 | (c >> 12)); 
-            outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F)); 
-            outName[outIdx++] = (char)(0x80 | (c & 0x3F)); 
+        else {
+            outName[outIdx++] = (char)(0xE0 | (c >> 12));
+            outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F));
+            outName[outIdx++] = (char)(0x80 | (c & 0x3F));
         }
     }
     outName[outIdx] = '\0';
@@ -340,12 +340,12 @@ void GetPlayerNickname(void* instance, char* outName, int maxLen) {
     if (outName[0] == '\0') strcpy(outName, "Player");
 }
 
-void GetKilledBy(void* instance, char* outName, int maxLen) { 
-    WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen); 
+void GetKilledBy(void* instance, char* outName, int maxLen) {
+    WideCharToUTF8(instance, OFFSET_PE_KILLEDBY, outName, maxLen);
 }
 
-void GetTaskId(void* task, char* outId, int maxLen) { 
-    WideCharToUTF8(task, OFFSET_GT_TASKID, outId, maxLen); 
+void GetTaskId(void* task, char* outId, int maxLen) {
+    WideCharToUTF8(task, OFFSET_GT_TASKID, outId, maxLen);
 }
 
 int GetRoleType(void* instance) {
@@ -372,7 +372,7 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
     if (tv) {
         if (forLocal) {
             pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LASTTRANSFORMPOS);
-            if (pos.x == 0 && pos.y == 0) 
+            if (pos.x == 0 && pos.y == 0)
                 pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
         } else {
             pos = *(Vector2*)((uintptr_t)tv + OFFSET_TV_LATESTPOS);
@@ -529,32 +529,32 @@ void ApplyDroneViewDelayed() {
     if (!localPlayerObject || !OverrideOrthographicSize) return;
     if (DroneView) {
         if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) { g_DroneViewDelay++; return; }
-        if (!g_DroneViewInitialized) { 
-            g_DroneViewInitialized = true; 
-            g_DroneViewReady = true; 
-            OverrideOrthographicSize(localPlayerObject, DroneZoom); 
+        if (!g_DroneViewInitialized) {
+            g_DroneViewInitialized = true;
+            g_DroneViewReady = true;
+            OverrideOrthographicSize(localPlayerObject, DroneZoom);
         }
-        else if (g_DroneViewReady) { 
-            OverrideOrthographicSize(localPlayerObject, DroneZoom); 
+        else if (g_DroneViewReady) {
+            OverrideOrthographicSize(localPlayerObject, DroneZoom);
         }
     }
 }
 
-void ResetDroneViewDelay() { 
-    g_DroneViewDelay = 0; 
-    g_DroneViewReady = false; 
-    g_DroneViewInitialized = false; 
-    g_ESPStabilized = false; 
-    g_FrameCount = 0; 
+void ResetDroneViewDelay() {
+    g_DroneViewDelay = 0;
+    g_DroneViewReady = false;
+    g_DroneViewInitialized = false;
+    g_ESPStabilized = false;
+    g_FrameCount = 0;
 }
 
 void DisableDroneView() {
-    if (localPlayerObject && OverrideOrthographicSize) 
+    if (localPlayerObject && OverrideOrthographicSize)
         OverrideOrthographicSize(localPlayerObject, g_DefaultOrthoSize);
-    g_DroneViewReady = false; 
-    g_DroneViewInitialized = false; 
-    g_DroneViewDelay = 0; 
-    g_ESPStabilized = false; 
+    g_DroneViewReady = false;
+    g_DroneViewInitialized = false;
+    g_DroneViewDelay = 0;
+    g_ESPStabilized = false;
     g_FrameCount = 0;
 }
 
@@ -584,16 +584,16 @@ void UpdateScreenSize() {
 
 void SetESPEnabled(bool e) {
     JNIEnv* env = GetJNIEnv();
-    if (env && g_SetESPEnabledMethod) 
+    if (env && g_SetESPEnabledMethod)
         env->CallStaticVoidMethod(g_MenuClass, g_SetESPEnabledMethod, (jboolean)e);
 }
 
 void SendBatchESP(JNIEnv* env) {
     if (!env || !g_BatchDrawMethod) return;
     jstring jdata = env->NewStringUTF(g_ESPBatchBuffer);
-    if (jdata) { 
-        env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, jdata); 
-        env->DeleteLocalRef(jdata); 
+    if (jdata) {
+        env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, jdata);
+        env->DeleteLocalRef(jdata);
     }
 }
 
@@ -638,18 +638,18 @@ inline void GetEdgePosition(float targetX, float targetY, float playerX, float p
     float padding = 60.0f;
     float minX = padding, maxX = g_ScreenWidth - padding;
     float minY = padding, maxY = g_ScreenHeight - padding;
-    
+
     float dx = targetX - playerX;
     float dy = targetY - playerY;
-    
+
     if (dx == 0 && dy == 0) {
         *edgeX = playerX;
         *edgeY = playerY;
         return;
     }
-    
+
     float t = 1.0f;
-    
+
     if (dx > 0) {
         float tX = (maxX - playerX) / dx;
         if (tX > 0 && tX < t) t = tX;
@@ -657,7 +657,7 @@ inline void GetEdgePosition(float targetX, float targetY, float playerX, float p
         float tX = (minX - playerX) / dx;
         if (tX > 0 && tX < t) t = tX;
     }
-    
+
     if (dy > 0) {
         float tY = (maxY - playerY) / dy;
         if (tY > 0 && tY < t) t = tY;
@@ -665,10 +665,10 @@ inline void GetEdgePosition(float targetX, float targetY, float playerX, float p
         float tY = (minY - playerY) / dy;
         if (tY > 0 && tY < t) t = tY;
     }
-    
+
     *edgeX = playerX + dx * t;
     *edgeY = playerY + dy * t;
-    
+
     if (*edgeX < minX) *edgeX = minX;
     else if (*edgeX > maxX) *edgeX = maxX;
     if (*edgeY < minY) *edgeY = minY;
@@ -705,16 +705,16 @@ void CheckAutoTask() {
 
 void ApplyNoClip(void* instance, bool enable) {
     if (!instance) return;
-    
+
     void* playerCollider = *(void**)((uintptr_t)instance + OFFSET_PE_PLAYERCOLLIDER);
     void* confineCollider = *(void**)((uintptr_t)instance + OFFSET_PE_CONFINECOLLIDER);
     void* wallCollisionHandler = *(void**)((uintptr_t)instance + OFFSET_PE_WALLCOLLISIONHANDLER);
-    
+
     if (Collider2D_set_isTrigger) {
         if (playerCollider) Collider2D_set_isTrigger(playerCollider, enable);
         if (confineCollider) Collider2D_set_isTrigger(confineCollider, enable);
     }
-    
+
     if (wallCollisionHandler) {
         *(bool*)((uintptr_t)wallCollisionHandler + OFFSET_WCCH_INWALL) = false;
     }
@@ -769,8 +769,8 @@ void RenderDebugPanelBatch() {
     snprintf(buf, sizeof(buf), "CamPos: X=%.2f Y=%.2f Z=%.2f [%s]", g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z, g_CameraPositionValid ? "VALID" : "INVALID");
     BatchAddText(centerX, startY, buf, g_CameraPositionValid ? COLOR_LIME : COLOR_RED); startY += lineHeight;
 
-    Vector2 usedPos = GetCameraPosition2D();
-    snprintf(buf, sizeof(buf), "ESP Using: X=%.2f Y=%.2f", usedPos.x, usedPos.y);
+    Vector2 excitingPos = GetCameraPosition2D();
+    snprintf(buf, sizeof(buf), "ESP Using: X=%.2f Y=%.2f", excitingPos.x, excitingPos.y);
     BatchAddText(centerX, startY, buf, COLOR_GOLD); startY += lineHeight;
 
     snprintf(buf, sizeof(buf), "Drone:%c | Ready:%c | Init:%c | Delay:%d/%d | Zoom:%.1f", DroneView ? 'Y' : 'N', g_DroneViewReady ? 'Y' : 'N', g_DroneViewInitialized ? 'Y' : 'N', g_DroneViewDelay, DRONE_VIEW_DELAY_FRAMES, DroneZoom);
@@ -872,18 +872,18 @@ void RenderESPBatch() {
                 float nameY = boxY - 55;
                 int iconCount = 0; if (p->isInfected) iconCount++; if (p->hasBomb) iconCount++;
                 float iconX = sx - 90 - (iconCount * 20);
-                if (p->isInfected) { BatchAddIcon(iconX, nameY + 5, "\uF293", COLOR_LIME); iconX += 40; }
-                if (p->hasBomb) { BatchAddIcon(iconX, nameY + 5, "\uF5FB", COLOR_ORANGE); }
+                if (p->isInfected) { BatchAddIcon(iconX, nameY + 5, "\uE9E0", COLOR_LIME); iconX += 40; }
+                if (p->hasBomb)    { BatchAddIcon(iconX, nameY + 5, "\uEE0A", COLOR_ORANGE); }
                 BatchAddText(sx, nameY, p->name, color);
             }
         } else if (ESPEdgeIndicator) {
-            float edgeX, edgeY; 
+            float edgeX, edgeY;
             GetEdgePosition(sx, sy, playerSx, playerSy, &edgeX, &edgeY);
             BatchAddBox(edgeX - 8, edgeY - 8, 16, 16, color);
             int iconCount = 0; if (p->isInfected) iconCount++; if (p->hasBomb) iconCount++;
             float iconX = edgeX - 70 - (iconCount * 20), iconY = edgeY - 25;
-            if (p->isInfected) { BatchAddIcon(iconX, iconY, "\uF293", COLOR_LIME); iconX += 40; }
-            if (p->hasBomb) { BatchAddIcon(iconX, iconY, "\uF5FB", COLOR_ORANGE); }
+            if (p->isInfected) { BatchAddIcon(iconX, iconY, "\uE9E0", COLOR_LIME); iconX += 40; }
+            if (p->hasBomb)    { BatchAddIcon(iconX, iconY, "\uEE0A", COLOR_ORANGE); }
             char et[64]; snprintf(et, sizeof(et), "%s %.0fm", p->name, dist);
             float tx = edgeX, ty = edgeY - 25;
             if (edgeX < 150) tx = 150; else if (edgeX > g_ScreenWidth - 150) tx = g_ScreenWidth - 150;
@@ -936,7 +936,7 @@ void RefreshPlayerDataAndRender() {
 
 int (*old_get_deadPlayersCount)() = NULL;
 
-// CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43B004C
+// CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x441E3E0
 void (*old_StateCameraUpdate)(void* instance, Vector3 worldUp, float deltaTime);
 void StateCameraUpdate(void* instance, Vector3 worldUp, float deltaTime) {
     old_StateCameraUpdate(instance, worldUp, deltaTime);
@@ -948,7 +948,7 @@ void StateCameraUpdate(void* instance, Vector3 worldUp, float deltaTime) {
     }
 }
 
-// PlayableEntity.Update - RVA: 0x3DCAEB0
+// PlayableEntity.Update - RVA: 0x3E34EB4
 void (*old_Update)(void *instance);
 void Update(void *instance) {
     if (instance) {
@@ -982,18 +982,18 @@ void Update(void *instance) {
     old_Update(instance);
 }
 
-// PlayableEntity.LateUpdate - RVA: 0x3DCBC64
+// PlayableEntity.LateUpdate - RVA: 0x3E35C6C
 void (*old_LateUpdate)(void *instance);
 void LateUpdate(void *instance) { old_LateUpdate(instance); }
 
-// PlayableEntity.TurnIntoGhost - RVA: 0x3DD69F8
+// PlayableEntity.TurnIntoGhost - RVA: 0x3E40C20
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
 void TurnIntoGhost(void *instance, int deathReason) {
     if (AntiDeath && instance == localPlayerInstance) return;
     old_TurnIntoGhost(instance, deathReason);
 }
 
-// LocalPlayer.Update - RVA: 0x3DA0C18
+// LocalPlayer.Update - RVA: 0x3E1A530
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
     old_LocalPlayer_Update(instance);
@@ -1012,55 +1012,55 @@ void LocalPlayer_Update(void *instance) {
     }
 }
 
-// LocalPlayer.GetPlayerSpeed - RVA: 0x3DAFD40
+// LocalPlayer.GetPlayerSpeed - RVA: 0x3E29D58
 float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
     float speed = old_GetPlayerSpeed(instance);
     return SpeedHack ? speed * SpeedMultiplier : speed;
 }
 
-// GGDRole.OnEnterVent - RVA: 0x3C5CCF0
+// GGDRole.OnEnterVent - RVA: 0x3CB6E50
 void (*old_OnEnterVent)(void *instance, void* vent, bool setCooldown);
 void OnEnterVent(void *instance, void* vent, bool setCooldown) { old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-// GGDRole.OnExitVent - RVA: 0x3C5CDE4
+// GGDRole.OnExitVent - RVA: 0x3CB6F44
 void (*old_OnExitVent)(void *instance, void* vent, bool setCooldown);
 void OnExitVent(void *instance, void* vent, bool setCooldown) { old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-// GGDRole.SetVentCooldown - RVA: 0x3C5B908
+// GGDRole.SetVentCooldown - RVA: 0x3CB5A70
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) { old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown); }
 
-// PlayableEntity.Despawn - RVA: 0x3DCD900
+// PlayableEntity.Despawn - RVA: 0x3E37904
 void (*old_Despawn)(void *instance);
 void Despawn(void *instance) {
-    if (instance) { 
-        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL); 
-        if (isLocal) { 
-            if (NoClip) ApplyNoClip(instance, false); 
-            ClearAllESP(); 
-        } 
+    if (instance) {
+        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
+        if (isLocal) {
+            if (NoClip) ApplyNoClip(instance, false);
+            ClearAllESP();
+        }
     }
     old_Despawn(instance);
 }
 
-// TasksHandler.OnEnable - RVA: 0x3D951D4
+// TasksHandler.OnEnable - RVA: 0x3E10340
 void (*old_TasksHandler_OnEnable)(void* instance);
 void TasksHandler_OnEnable(void* instance) { if (instance) g_TasksHandler = instance; old_TasksHandler_OnEnable(instance); }
 
-// TasksHandler.OnDisable - RVA: 0x3D952DC
+// TasksHandler.OnDisable - RVA: 0x3E10448
 void (*old_TasksHandler_OnDisable)(void* instance);
 void TasksHandler_OnDisable(void* instance) { if (instance == g_TasksHandler) g_TasksHandler = NULL; old_TasksHandler_OnDisable(instance); }
 
-// RoofHandler.Awake - RVA: 0x3D3F618
+// RoofHandler.Awake - RVA: 0x3DA4F08
 void (*old_RoofHandler_Awake)(void* instance);
 void RoofHandler_Awake(void* instance) { if (instance) g_RoofHandler = instance; old_RoofHandler_Awake(instance); }
 
-// RoofHandler.OnDestroy - RVA: 0x3D3F71C
+// RoofHandler.OnDestroy - RVA: 0x3DA500C
 void (*old_RoofHandler_OnDestroy)(void* instance);
 void RoofHandler_OnDestroy(void* instance) { if (instance == g_RoofHandler) { g_RoofHandler = NULL; g_RoofRemovedThisRound = false; } old_RoofHandler_OnDestroy(instance); }
 
-// LocalPlayer.StartRound - RVA: 0x3DA8330
+// LocalPlayer.StartRound - RVA: 0x3E22024
 void (*old_LocalPlayer_StartRound)(void* instance, bool isFirstRound);
 void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
     g_RoofRemovedThisRound = false;
@@ -1068,7 +1068,7 @@ void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
     old_LocalPlayer_StartRound(instance, isFirstRound);
 }
 
-// WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x379F624
+// WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x37D20F0
 void (*old_WallCollisionCheckHandler_OnCollisionEnter2D)(void* instance, void* collision);
 void WallCollisionCheckHandler_OnCollisionEnter2D(void* instance, void* collision) {
     if (NoClip) {
@@ -1081,43 +1081,43 @@ void WallCollisionCheckHandler_OnCollisionEnter2D(void* instance, void* collisio
 jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     InitESP(env);
     const char *features[] = {
-        OBFUSCATE("Category_[\uECB4]Vision & Cooldown"),
-        OBFUSCATE("Toggle_[\uECB4]Unlimited Vision"),
-        OBFUSCATE("Toggle_[\uF577]Remove Roof"),
-        OBFUSCATE("Toggle_[\uF210]No Vent Cooldown"),
-        OBFUSCATE("Toggle_[\uEDB4]See Ghosts"),
-        OBFUSCATE("Category_[\uF605]Movement"),
-        OBFUSCATE("Toggle_[\uEFB0]No Clip"),
-        OBFUSCATE("Toggle_[\uF2DA]Drone View"),
-        OBFUSCATE("SeekBar_[\uF403]Zoom Level_5_25"),
-        OBFUSCATE("Category_[\uF04B]ESP Settings"),
-        OBFUSCATE("Toggle_[\uF04B]ESP Enabled"),
-        OBFUSCATE("Toggle_True_[\uF63A]ESP Lines"),
-        OBFUSCATE("Toggle_True_[\uEA36]ESP Box"),
-        OBFUSCATE("Toggle_True_[\uEF05]ESP Distance"),
-        OBFUSCATE("Toggle_True_[\uF25F]ESP Names"),
-        OBFUSCATE("Toggle_True_[\uEBBD]Edge Indicator"),
-        OBFUSCATE("Toggle_True_[\uECB2]Hide in Vote Screen"),
-        OBFUSCATE("Toggle_[\uECB2]Hide in Lobby"),
-        OBFUSCATE("Category_[\uEF13]Teleport"),
-        OBFUSCATE("InputValue_999_[\uEF05]Teleport X"),
-        OBFUSCATE("InputValue_999_[\uEF05]Teleport Y"),
-        OBFUSCATE("Button_[\uF0B2]Set Current Position"),
-        OBFUSCATE("Button_[\uF093]Teleport Now"),
-        OBFUSCATE("Category_[\uEE34]Task & Emergency"),
-        OBFUSCATE("Toggle_[\uF216]Auto Complete Tasks"),
-        OBFUSCATE("Button_[\uEF93]Call Emergency"),
-        OBFUSCATE("Category_[\uEB06]Debug Panel"),
-        OBFUSCATE("Toggle_[\uF1F5]Show Debug Info"),
-        OBFUSCATE("Category_[\uED3D]Experimental [May Not Work]"),
-        OBFUSCATE("Toggle_[\uF103]Anti-Death [LOCAL]"),
-        OBFUSCATE("Toggle_[\uEC11]Speed Boost [LOCAL]"),
-        OBFUSCATE("SeekBar_[\uF403]Speed Multiplier_10_40"),
-        OBFUSCATE("Category_[\uF447]About"),
-        OBFUSCATE("RichTextView_[\uF185]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
-        OBFUSCATE("ButtonLink_[\uF2D4]YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
-        OBFUSCATE("ButtonLink_[\uEDCA]Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
-        OBFUSCATE("ButtonLink_[\uEEAF]GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
+            OBFUSCATE("Category_[\uE220]Vision & Cooldown"),
+            OBFUSCATE("Toggle_[\uE220]Unlimited Vision"),
+            OBFUSCATE("Toggle_[\uE2C4]Remove Roof"),
+            OBFUSCATE("Toggle_[\uE492]No Vent Cooldown"),
+            OBFUSCATE("Toggle_[\uE62A]See Ghosts"),
+            OBFUSCATE("Category_[\uE730]Movement"),
+            OBFUSCATE("Toggle_[\uE73A]No Clip"),
+            OBFUSCATE("Toggle_[\uED74]Drone View"),
+            OBFUSCATE("SeekBar_[\uE434]Zoom Level_5_25"),
+            OBFUSCATE("Category_[\uEBB4]ESP Settings"),
+            OBFUSCATE("Toggle_[\uEBB4]ESP Enabled"),
+            OBFUSCATE("Toggle_True_[\uE6D2]ESP Lines"),
+            OBFUSCATE("Toggle_True_[\uE6CE]ESP Box"),
+            OBFUSCATE("Toggle_True_[\uE316]ESP Distance"),
+            OBFUSCATE("Toggle_True_[\uE6F6]ESP Names"),
+            OBFUSCATE("Toggle_True_[\uE0A2]Edge Indicator"),
+            OBFUSCATE("Toggle_True_[\uE224]Hide in Vote Screen"),
+            OBFUSCATE("Toggle_[\uE224]Hide in Lobby"),
+            OBFUSCATE("Category_[\uE31A]Teleport"),
+            OBFUSCATE("InputValue_999_[\uE316]Teleport X"),
+            OBFUSCATE("InputValue_999_[\uE316]Teleport Y"),
+            OBFUSCATE("Button_[\uE1D6]Set Current Position"),
+            OBFUSCATE("Button_[\uE2DE]Teleport Now"),
+            OBFUSCATE("Category_[\uE186]Task & Emergency"),
+            OBFUSCATE("Toggle_[\uEBA6]Auto Complete Tasks"),
+            OBFUSCATE("Button_[\uE0CE]Call Emergency"),
+            OBFUSCATE("Category_[\uE5F4]Debug Panel"),
+            OBFUSCATE("Toggle_[\uE2CE]Show Debug Info"),
+            OBFUSCATE("Category_[\uE79E]Experimental [May Not Work]"),
+            OBFUSCATE("Toggle_[\uE40A]Anti-Death [LOCAL]"),
+            OBFUSCATE("Toggle_[\uE628]Speed Boost [LOCAL]"),
+            OBFUSCATE("SeekBar_[\uE434]Speed Multiplier_10_40"),
+            OBFUSCATE("Category_[\uE46A]About"),
+            OBFUSCATE("RichTextView_[\uE348]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
+            OBFUSCATE("ButtonLink_[\uE4FC]YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
+            OBFUSCATE("ButtonLink_[\uE576]Developer: anonimbiri_https://github.com/anonimbiri-IsBack"),
+            OBFUSCATE("ButtonLink_[\uE1BC]GitHub Open Source_https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod"),
     };
     int count = sizeof(features) / sizeof(features[0]);
     jobjectArray ret = env->NewObjectArray(count, env->FindClass("java/lang/String"), env->NewStringUTF(""));
@@ -1167,78 +1167,78 @@ void hack_thread() {
     if (il2cppHandle) { il2cpp_string_new_func = (il2cpp_string_new_t)dlsym(il2cppHandle, "il2cpp_string_new"); LOGI("il2cpp_string_new: %p", il2cpp_string_new_func); }
 
 #if defined(__aarch64__)
-    // PlayableEntity.Update - RVA: 0x3DCAEB0
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCAEB0")), Update, old_Update);
-    
-    // PlayableEntity.LateUpdate - RVA: 0x3DCBC64
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCBC64")), LateUpdate, old_LateUpdate);
-    
-    // PlayableEntity.TurnIntoGhost - RVA: 0x3DD69F8
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DD69F8")), TurnIntoGhost, old_TurnIntoGhost);
-    
-    // PlayableEntity.Despawn - RVA: 0x3DCD900
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCD900")), Despawn, old_Despawn);
-    
-    // LocalPlayer.Update - RVA: 0x3DA0C18
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA0C18")), LocalPlayer_Update, old_LocalPlayer_Update);
-    
-    // LocalPlayer.GetPlayerSpeed - RVA: 0x3DAFD40
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DAFD40")), GetPlayerSpeed, old_GetPlayerSpeed);
-    
-    // LocalPlayer.StartRound - RVA: 0x3DA8330
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA8330")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
-    
-    // CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x43B004C
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x43B004C")), StateCameraUpdate, old_StateCameraUpdate);
-    
-    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3DB0714
-    OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DB0714")));
-    
-    // PlayableEntity.TeleportTo - RVA: 0x3DDBA74
-    TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DDBA74")));
-    
-    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3DB7E14
-    SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DB7E14")));
-    
-    // GGDRole.OnEnterVent - RVA: 0x3C5CCF0
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C5CCF0")), OnEnterVent, old_OnEnterVent);
-    
-    // GGDRole.OnExitVent - RVA: 0x3C5CDE4
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C5CDE4")), OnExitVent, old_OnExitVent);
-    
-    // GGDRole.SetVentCooldown - RVA: 0x3C5B908
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3C5B908")), SetVentCooldown, old_SetVentCooldown);
-    
-    // TasksHandler.OnEnable - RVA: 0x3D951D4
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D951D4")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
-    
-    // TasksHandler.OnDisable - RVA: 0x3D952DC
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D952DC")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
-    
-    // TasksHandler.CompleteTask - RVA: 0x3D90F24
-    TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D90F24")));
-    
-    // TasksHandler.UpdateTaskVisuals - RVA: 0x3D98E3C
-    TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D98E3C")));
-    
-    // RoofHandler.Awake - RVA: 0x3D3F618
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D3F618")), RoofHandler_Awake, old_RoofHandler_Awake);
-    
-    // RoofHandler.OnDestroy - RVA: 0x3D3F71C
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D3F71C")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
-    
-    // RoofHandler.DeactivateRoofs - RVA: 0x3D3F928
-    RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3D3F928")));
-    
-    // PlayerController.CallEmergency - RVA: 0x3DEC758
-    PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DEC758")));
-    
-    // Collider2D.set_isTrigger - RVA: 0x74A4DE0
-    Collider2D_set_isTrigger = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x74A4DE0")));
-    
-    // WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x379F624
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x379F624")), WallCollisionCheckHandler_OnCollisionEnter2D, old_WallCollisionCheckHandler_OnCollisionEnter2D);
-    
+    // PlayableEntity.Update - RVA: 0x3E34EB4
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E34EB4")), Update, old_Update);
+
+    // PlayableEntity.LateUpdate - RVA: 0x3E35C6C
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E35C6C")), LateUpdate, old_LateUpdate);
+
+    // PlayableEntity.TurnIntoGhost - RVA: 0x3E40C20
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E40C20")), TurnIntoGhost, old_TurnIntoGhost);
+
+    // PlayableEntity.Despawn - RVA: 0x3E37904
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E37904")), Despawn, old_Despawn);
+
+    // LocalPlayer.Update - RVA: 0x3E1A530
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E1A530")), LocalPlayer_Update, old_LocalPlayer_Update);
+
+    // LocalPlayer.GetPlayerSpeed - RVA: 0x3E29D58
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E29D58")), GetPlayerSpeed, old_GetPlayerSpeed);
+
+    // LocalPlayer.StartRound - RVA: 0x3E22024
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E22024")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
+
+    // CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x441E3E0
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x441E3E0")), StateCameraUpdate, old_StateCameraUpdate);
+
+    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3E2A72C
+    OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E2A72C")));
+
+    // PlayableEntity.TeleportTo - RVA: 0x3E462D8
+    TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E462D8")));
+
+    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3E32074
+    SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E32074")));
+
+    // GGDRole.OnEnterVent - RVA: 0x3CB6E50
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CB6E50")), OnEnterVent, old_OnEnterVent);
+
+    // GGDRole.OnExitVent - RVA: 0x3CB6F44
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CB6F44")), OnExitVent, old_OnExitVent);
+
+    // GGDRole.SetVentCooldown - RVA: 0x3CB5A70
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CB5A70")), SetVentCooldown, old_SetVentCooldown);
+
+    // TasksHandler.OnEnable - RVA: 0x3E10340
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E10340")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
+
+    // TasksHandler.OnDisable - RVA: 0x3E10448
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E10448")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
+
+    // TasksHandler.CompleteTask - RVA: 0x3E09EEC
+    TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E09EEC")));
+
+    // TasksHandler.UpdateTaskVisuals - RVA: 0x3E13FA8
+    TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E13FA8")));
+
+    // RoofHandler.Awake - RVA: 0x3DA4F08
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA4F08")), RoofHandler_Awake, old_RoofHandler_Awake);
+
+    // RoofHandler.OnDestroy - RVA: 0x3DA500C
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DA500C")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
+
+    // RoofHandler.DeactivateRoofs - RVA: 0x3DA5218
+    RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DA5218")));
+
+    // PlayerController.CallEmergency - RVA: 0x3E57E9C
+    PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E57E9C")));
+
+    // Collider2D.set_isTrigger - RVA: 0x75320A8
+    Collider2D_set_isTrigger = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x75320A8")));
+
+    // WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x37D20F0
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x37D20F0")), WallCollisionCheckHandler_OnCollisionEnter2D, old_WallCollisionCheckHandler_OnCollisionEnter2D);
+
     LOGI("All hooks installed!");
 #endif
     LOGI("Done");

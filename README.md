@@ -5,12 +5,14 @@
 [![Downloads](https://img.shields.io/github/downloads/GameSketchers/Goose-Goose-Duck-Android-Mod/total?style=for-the-badge&color=D4A5C9&labelColor=16141F)](https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod/releases)
 [![Stars](https://img.shields.io/github/stars/GameSketchers/Goose-Goose-Duck-Android-Mod?style=for-the-badge&color=A99FD3&labelColor=16141F)](https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod/stargazers)
 [![License](https://img.shields.io/badge/License-MIT-8EC8E8?style=for-the-badge&labelColor=16141F)](LICENSE)
+[![Updater Guide](https://img.shields.io/badge/⚡_Offset_Updater-Guide-FFC4A3?style=for-the-badge&labelColor=16141F)](./OFFSET_TUTORIAL.md)
 
 ![Banner](./banner.gif)
 
 **✨ Free & Open Source Android Mod ✨**
 
-<a href="https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod/releases"><img src="https://img.shields.io/badge/📥_DOWNLOAD-FFC4A3?style=for-the-badge&logoColor=16141F" /></a>
+<a href="https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod/releases"><img src="https://img.shields.io/badge/📥_DOWNLOAD_APK-FFC4A3?style=for-the-badge&logoColor=16141F" /></a>
+<a href="./OFFSET_TUTORIAL.md"><img src="https://img.shields.io/badge/📖_UPDATER_TUTORIAL-A99FD3?style=for-the-badge&logoColor=16141F" /></a>
 <a href="https://youtube.com/@anonimbiri_IsBack"><img src="https://img.shields.io/badge/📺_YOUTUBE-E8A0A0?style=for-the-badge" /></a>
 <a href="https://github.com/anonimbiri-IsBack"><img src="https://img.shields.io/badge/💻_DEVELOPER-98D9C2?style=for-the-badge" /></a>
 
@@ -47,6 +49,14 @@
 - 🦠 **Bio Icon:** Player is Infected
 - 💣 **Bomb Icon:** Player has a Bomb
 - **Flags:** `[K]` Killed this round, `[V]` In Vent, `[I]` Invisible, `[M]` Morphed
+
+---
+
+## ⚡ Offset Auto-Updater
+
+Want to update offsets for a new game patch? Check out our automated Python tool:
+
+👉 [**Read the Offset Auto-Updater Tutorial (`TUTORIAL.md`)**](./TUTORIAL.md)
 
 ---
 

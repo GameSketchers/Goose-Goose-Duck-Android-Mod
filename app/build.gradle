@@ -11,6 +11,11 @@ android {
         ndk {
             abiFilters 'armeabi-v7a', 'arm64-v8a'
         }
+        multiDexEnabled false
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 	androidResources {
         noCompress 'obb'
