@@ -20,8 +20,13 @@
 
 #define targetLibName OBFUSCATE("libil2cpp.so")
 
-// ESP Ayarları
-bool ESPEnabled = true;
+bool AntiDeath = false;
+bool UnlimitedVision = false;
+bool NoCooldown = false;
+bool NoClip = false;
+bool SeeGhosts = false;
+bool RemoveRoof = false;
+bool ESPEnabled = false;
 bool ESPLines = true;
 bool ESPBox = true;
 bool ESPDistance = true;
@@ -29,26 +34,7 @@ bool ESPName = true;
 bool ESPEdgeIndicator = true;
 bool ESPHideInVote = true;
 bool ESPHideInLobby = false;
-bool SeeGhosts = true;
 bool DebugMode = false;
-
-// Görev & Sabotaj Ayarları
-bool SafeAutoTasks = false;
-bool AutoRepairSabotage = false;
-bool btnRepairSabotageNow = false;
-bool btnCompleteOneTask = false;
-bool btnUnlockSabotages = false;
-
-// İletişim (Ölüleri Duyma & Okuma)
-bool HearDeadVoice = false;
-bool ReadDeadChat = false;
-
-// Hareket & Diğer
-bool AntiDeath = false;
-bool UnlimitedVision = false;
-bool NoCooldown = false;
-bool NoClip = false;
-bool RemoveRoof = false;
 bool DroneView = false;
 float DroneZoom = 5.0f;
 bool SpeedHack = false;
@@ -60,16 +46,14 @@ float SavedPosX = 0.0f;
 float SavedPosY = 0.0f;
 bool btnTeleport = false;
 bool btnSetPosition = false;
-bool btnCallEmergency = false;
 
+bool AutoTaskComplete = false;
+bool btnCallEmergency = false;
 void* g_TasksHandler = NULL;
 void* g_RoofHandler = NULL;
 void* g_GameManager = NULL;
 bool g_RoofRemovedThisRound = false;
-
-std::chrono::steady_clock::time_point g_LastSafeTaskTime;
-std::chrono::steady_clock::time_point g_SabotageDetectedTime;
-bool g_SabotagePending = false;
+std::chrono::steady_clock::time_point g_LastAutoTaskTime;
 
 void *localPlayerInstance = NULL;
 void *localPlayerObject = NULL;
@@ -103,7 +87,20 @@ struct Quaternion { float x, y, z, w; };
 #define COLOR_BLUE     0xFF0088FF
 #define COLOR_PINK     0xFFFF69B4
 #define COLOR_LIME     0xFF32CD32
+#define COLOR_PURPLE   0xFF9932CC
 #define COLOR_GOLD     0xFFFFD700
+#define COLOR_CRIMSON  0xFFDC143C
+#define COLOR_TEAL     0xFF008080
+
+// CodeStage.AntiCheat.ObscuredTypes.ObscuredFloat
+struct ObscuredFloat_t {
+    int currentCryptoKey;
+    int hiddenValue;
+    int8_t hiddenValueOldByte4[4];
+    bool inited;
+    float fakeValue;
+    bool fakeValueActive;
+};
 
 // PlayableEntity (TypeDefIndex: 6395)
 #define OFFSET_PE_ENTITYNUMBER       0x88
@@ -127,7 +124,9 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_ISINPELICAN        0x18D
 #define OFFSET_PE_ISMORPHED          0x18F
 #define OFFSET_PE_ISSPECTATOR        0x200
+#define OFFSET_PE_RIGIDBODY          0x2C0
 #define OFFSET_PE_TRANSFORMVIEW      0x2C8
+#define OFFSET_PE_BODYCOLLIDER       0x2D8
 #define OFFSET_PE_PLAYERCOLLIDER     0x2E0
 #define OFFSET_PE_WALLCHECKCOLLIDER  0x2E8
 #define OFFSET_PE_WALLCOLLISIONHANDLER 0x2F0
@@ -163,11 +162,17 @@ struct Quaternion { float x, y, z, w; };
 
 // GameTask (TypeDefIndex: 5656)
 #define OFFSET_GT_TASKID             0x10
-#define OFFSET_GT_ISSABOTAGE         0x53
 #define OFFSET_GT_ISFAKETASK         0xD1
 
 // WallCollisionCheckHandler (TypeDefIndex: 1106)
 #define OFFSET_WCCH_INWALL           0x20
+
+// UICooldownButton (TypeDefIndex: 201)
+#define OFFSET_UICB_DEFAULTCOOLDOWN   0xB0
+#define OFFSET_UICB_INTERNALCOOLDOWN  0xCC
+#define OFFSET_UICB_PAUSED            0xC8
+#define OFFSET_UICB_INTERACTABLE_OVERRIDE 0x148
+#define OFFSET_UICB_INTERACTABLE_OVERRIDE_EVEN_IN_CD 0x149
 
 struct PlayerInfo {
     void* instance;
@@ -307,6 +312,42 @@ bool (*GameManager_IsInLobby)(void*) = NULL;
 // GameManager.IsInMeeting - RVA: 0x3ADC5D4
 bool (*GameManager_IsInMeeting)(void*) = NULL;
 
+// ObscuredFloat.Encrypt - RVA: 0x36905C4
+int (*ObscuredFloat_Encrypt)(float value, int key) = NULL;
+
+// ObscuredFloat.Decrypt - RVA: 0x3690614
+float (*ObscuredFloat_Decrypt)(int value, int key) = NULL;
+
+// UICooldownButton.ForceInteractableEvenInCooldown - RVA: 0x39E261C
+void (*UICooldownButton_ForceInteractableEvenInCooldown)(void*, bool) = NULL;
+
+float ReadObscuredFloat(uintptr_t addr) {
+    if (!addr) return 0.0f;
+    ObscuredFloat_t* of = (ObscuredFloat_t*)addr;
+    if (ObscuredFloat_Decrypt) {
+        return ObscuredFloat_Decrypt(of->hiddenValue, of->currentCryptoKey);
+    }
+    union { int i; float f; } u;
+    u.i = of->hiddenValue ^ of->currentCryptoKey;
+    return u.f;
+}
+
+void WriteObscuredFloat(uintptr_t addr, float val) {
+    if (!addr) return;
+    ObscuredFloat_t* of = (ObscuredFloat_t*)addr;
+    if (of->currentCryptoKey == 0) of->currentCryptoKey = 12345;
+    if (ObscuredFloat_Encrypt) {
+        of->hiddenValue = ObscuredFloat_Encrypt(val, of->currentCryptoKey);
+    } else {
+        union { float f; int i; } u;
+        u.f = val;
+        of->hiddenValue = u.i ^ of->currentCryptoKey;
+    }
+    of->fakeValue = val;
+    of->fakeValueActive = false;
+    of->inited = true;
+}
+
 typedef void* (*il2cpp_string_new_t)(const char*);
 il2cpp_string_new_t il2cpp_string_new_func = NULL;
 
@@ -339,6 +380,20 @@ void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen)
             outName[outIdx++] = (char)(0xC0 | (c >> 6));
             outName[outIdx++] = (char)(0x80 | (c & 0x3F));
         }
+        else if (c >= 0xD800 && c <= 0xDBFF) {
+            if (i + 1 < length) {
+                uint16_t c2 = chars[i + 1];
+                if (c2 >= 0xDC00 && c2 <= 0xDFFF) {
+                    uint32_t codepoint = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
+                    outName[outIdx++] = (char)(0xF0 | (codepoint >> 18));
+                    outName[outIdx++] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+                    outName[outIdx++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+                    outName[outIdx++] = (char)(0x80 | (codepoint & 0x3F));
+                    i++;
+                }
+            }
+        }
+        else if (c >= 0xDC00 && c <= 0xDFFF) { continue; }
         else {
             outName[outIdx++] = (char)(0xE0 | (c >> 12));
             outName[outIdx++] = (char)(0x80 | ((c >> 6) & 0x3F));
@@ -368,11 +423,6 @@ int GetRoleType(void* instance) {
     return (int)*(short*)((uintptr_t)rolePtr + OFFSET_ROLE_TYPE);
 }
 
-float GetCurrentOrthoSize() {
-    if (DroneView && g_DroneViewReady) return DroneZoom;
-    return g_DefaultOrthoSize;
-}
-
 const char* GetGameStateName(int state) {
     switch (state) {
         case 0: return "InLobby";
@@ -385,6 +435,11 @@ const char* GetGameStateName(int state) {
         case 7: return "Proceeding";
         default: return "Unknown";
     }
+}
+
+float GetCurrentOrthoSize() {
+    if (DroneView && g_DroneViewReady) return DroneZoom;
+    return g_DefaultOrthoSize;
 }
 
 Vector2 GetPlayerPosition(void* instance, bool forLocal) {
@@ -404,7 +459,7 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
 }
 
 float GetESPScale() {
-    float orthoSize = g_DefaultOrthoSize;
+    float orthoSize = GetCurrentOrthoSize();
     if (orthoSize <= 0) orthoSize = 5.0f;
     return g_ScreenHeight / (orthoSize * 2.0f);
 }
@@ -417,7 +472,7 @@ bool IsKillerRole(int roleId) {
         case 23: case 25: case 27: case 33: case 36: case 38: case 41: case 44:
         case 46: case 48: case 51: case 58: case 59: case 60: case 62: case 65:
         case 66: case 74: case 75: case 79: case 81: case 84: case 85: case 103:
-        case 104: case 106: case 108: case 109: case 110:
+        case 104: case 106: case 108: case 109:
             return true;
         default:
             return false;
@@ -469,7 +524,6 @@ RoleInfo GetRoleInfo(int roleId) {
             case 106: info.name = "Hawk"; break;
             case 108: info.name = "Dr Turducken"; break;
             case 109: info.name = "Monster"; break;
-            case 110: info.name = "Witch Doctor"; break;
             default: info.name = "Killer"; break;
         }
         info.color = COLOR_RED;
@@ -542,9 +596,6 @@ RoleInfo GetRoleInfo(int roleId) {
         case 102: info.name = "Sensor"; break;
         case 105: info.name = "Delusional"; break;
         case 107: info.name = "AI"; break;
-        case 111: info.name = "Cuckoo"; break;
-        case 112: info.name = "Swordsman"; break;
-        case 113: info.name = "Magpie"; break;
         default: info.name = "Unknown"; break;
     }
     info.color = COLOR_WHITE;
@@ -634,42 +685,26 @@ inline bool WorldToScreen(Vector2 world, Vector2 camPos, float scale, float* sx,
 }
 
 bool ClipLine(float* x1, float* y1, float* x2, float* y2) {
-    const float xmin = 0.0f, ymin = 0.0f, xmax = g_ScreenWidth, ymax = g_ScreenHeight;
+    const float xmin = 0, ymin = 0, xmax = g_ScreenWidth, ymax = g_ScreenHeight;
     int outcode1 = 0, outcode2 = 0;
     if (*x1 < xmin) outcode1 |= 1; else if (*x1 > xmax) outcode1 |= 2;
     if (*y1 < ymin) outcode1 |= 8; else if (*y1 > ymax) outcode1 |= 4;
     if (*x2 < xmin) outcode2 |= 1; else if (*x2 > xmax) outcode2 |= 2;
     if (*y2 < ymin) outcode2 |= 8; else if (*y2 > ymax) outcode2 |= 4;
-
     while (true) {
         if (!(outcode1 | outcode2)) return true;
         if (outcode1 & outcode2) return false;
-
-        float x = 0.0f, y = 0.0f;
-        int outcodeOut = outcode1 ? outcode1 : outcode2;
-
-        if (outcodeOut & 4) {
-            x = *x1 + (*x2 - *x1) * (ymax - *y1) / (*y2 - *y1);
-            y = ymax;
-        } else if (outcodeOut & 8) {
-            x = *x1 + (*x2 - *x1) * (ymin - *y1) / (*y2 - *y1);
-            y = ymin;
-        } else if (outcodeOut & 2) {
-            y = *y1 + (*y2 - *y1) * (xmax - *x1) / (*x2 - *x1);
-            x = xmax;
-        } else if (outcodeOut & 1) {
-            y = *y1 + (*y2 - *y1) * (xmin - *x1) / (*x2 - *x1);
-            x = xmin;
-        }
-
+        float x, y; int outcodeOut = outcode1 ? outcode1 : outcode2;
+        if (outcodeOut & 4) { x = *x1 + (*x2 - *x1) * (ymax - *y1) / (*y2 - *y1); y = ymax; }
+        else if (outcodeOut & 8) { x = *x1 + (*x2 - *x1) * (ymin - *y1) / (*y2 - *y1); y = ymin; }
+        else if (outcodeOut & 2) { y = *y1 + (*y2 - *x1) * (xmax - *x1) / (*x2 - *x1); x = xmax; }
+        else { y = *y1 + (*y2 - *y1) * (xmin - *x1) / (*x2 - *x1); x = xmin; }
         if (outcodeOut == outcode1) {
-            *x1 = x; *y1 = y;
-            outcode1 = 0;
+            *x1 = x; *y1 = y; outcode1 = 0;
             if (*x1 < xmin) outcode1 |= 1; else if (*x1 > xmax) outcode1 |= 2;
             if (*y1 < ymin) outcode1 |= 8; else if (*y1 > ymax) outcode1 |= 4;
         } else {
-            *x2 = x; *y2 = y;
-            outcode2 = 0;
+            *x2 = x; *y2 = y; outcode2 = 0;
             if (*x2 < xmin) outcode2 |= 1; else if (*x2 > xmax) outcode2 |= 2;
             if (*y2 < ymin) outcode2 |= 8; else if (*y2 > ymax) outcode2 |= 4;
         }
@@ -691,154 +726,58 @@ inline void GetEdgePosition(float targetX, float targetY, float playerX, float p
     }
 
     float t = 1.0f;
-    if (dx > 0) { float tX = (maxX - playerX) / dx; if (tX > 0 && tX < t) t = tX; }
-    else if (dx < 0) { float tX = (minX - playerX) / dx; if (tX > 0 && tX < t) t = tX; }
 
-    if (dy > 0) { float tY = (maxY - playerY) / dy; if (tY > 0 && tY < t) t = tY; }
-    else if (dy < 0) { float tY = (minY - playerY) / dy; if (tY > 0 && tY < t) t = tY; }
+    if (dx > 0) {
+        float tX = (maxX - playerX) / dx;
+        if (tX > 0 && tX < t) t = tX;
+    } else if (dx < 0) {
+        float tX = (minX - playerX) / dx;
+        if (tX > 0 && tX < t) t = tX;
+    }
+
+    if (dy > 0) {
+        float tY = (maxY - playerY) / dy;
+        if (tY > 0 && tY < t) t = tY;
+    } else if (dy < 0) {
+        float tY = (minY - playerY) / dy;
+        if (tY > 0 && tY < t) t = tY;
+    }
 
     *edgeX = playerX + dx * t;
     *edgeY = playerY + dy * t;
 
-    if (*edgeX < minX) *edgeX = minX; else if (*edgeX > maxX) *edgeX = maxX;
-    if (*edgeY < minY) *edgeY = minY; else if (*edgeY > maxY) *edgeY = maxY;
+    if (*edgeX < minX) *edgeX = minX;
+    else if (*edgeX > maxX) *edgeX = maxX;
+    if (*edgeY < minY) *edgeY = minY;
+    else if (*edgeY > maxY) *edgeY = maxY;
 }
 
-void ExecuteRepairSabotage() {
+void AutoCompleteAllTasks() {
     if (!g_TasksHandler || !TasksHandler_CompleteTask || !il2cpp_string_new_func) return;
     void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
     if (!taskList) return;
     void* items = *(void**)((uintptr_t)taskList + 0x10);
     int count = *(int*)((uintptr_t)taskList + 0x18);
     if (!items || count <= 0) return;
-
-    for (int i = 0; i < count; i++) {
-        void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
-        if (!task) continue;
-        bool isSabotage = *(bool*)((uintptr_t)task + OFFSET_GT_ISSABOTAGE);
-        bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
-        if (isSabotage && !isFake) {
-            char taskId[64]; GetTaskId(task, taskId, sizeof(taskId));
-            if (taskId[0] == '\0') continue;
-            void* taskIdStr = il2cpp_string_new_func(taskId);
-            if (taskIdStr) {
-                TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-                LOGI("Sabotage repaired safely: %s", taskId);
-            }
-            break;
-        }
-    }
-    if (TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
-}
-
-void ExecuteCompleteSingleTask() {
-    if (!g_TasksHandler || !TasksHandler_CompleteTask || !il2cpp_string_new_func) return;
-    void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
-    if (!taskList) return;
-    void* items = *(void**)((uintptr_t)taskList + 0x10);
-    int count = *(int*)((uintptr_t)taskList + 0x18);
-    if (!items || count <= 0) return;
-
-    for (int i = 0; i < count; i++) {
-        void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
-        if (!task) continue;
-        bool isSabotage = *(bool*)((uintptr_t)task + OFFSET_GT_ISSABOTAGE);
-        bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
-        if (!isSabotage && !isFake) {
-            char taskId[64]; GetTaskId(task, taskId, sizeof(taskId));
-            if (taskId[0] == '\0') continue;
-            void* taskIdStr = il2cpp_string_new_func(taskId);
-            if (taskIdStr) {
-                TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-                LOGI("Single task completed safely: %s", taskId);
-                if (TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
-                break;
-            }
-        }
-    }
-}
-
-// Sabotaj görevlerini tamamlayarak sabotajları açma
-void ExecuteUnlockSabotages() {
-    if (!g_TasksHandler || !TasksHandler_CompleteTask || !il2cpp_string_new_func) return;
-    void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
-    if (!taskList) return;
-    void* items = *(void**)((uintptr_t)taskList + 0x10);
-    int count = *(int*)((uintptr_t)taskList + 0x18);
-    if (!items || count <= 0) return;
-
+    bool anyCompleted = false;
     for (int i = 0; i < count; i++) {
         void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
         if (!task) continue;
         bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
-        if (isFake) {
-            char taskId[64]; GetTaskId(task, taskId, sizeof(taskId));
-            if (taskId[0] == '\0') continue;
-            void* taskIdStr = il2cpp_string_new_func(taskId);
-            if (taskIdStr) {
-                TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-                LOGI("Sabotage fake task completed: %s", taskId);
-            }
-        }
+        if (isFake) continue;
+        char taskId[64]; GetTaskId(task, taskId, sizeof(taskId));
+        if (taskId[0] == '\0') continue;
+        void* taskIdStr = il2cpp_string_new_func(taskId);
+        if (taskIdStr) { TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false); anyCompleted = true; }
     }
-    if (TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
+    if (anyCompleted && TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
 }
 
-void HandleTasksAndSabotageLogic() {
-    if (!isInGame || isInLobby || !g_TasksHandler) return;
+void CheckAutoTask() {
+    if (!AutoTaskComplete || !g_TasksHandler || !isInGame || isInLobby) return;
     auto now = std::chrono::steady_clock::now();
-
-    if (btnRepairSabotageNow) {
-        ExecuteRepairSabotage();
-        btnRepairSabotageNow = false;
-    }
-    if (btnCompleteOneTask) {
-        ExecuteCompleteSingleTask();
-        btnCompleteOneTask = false;
-    }
-    if (btnUnlockSabotages) {
-        ExecuteUnlockSabotages();
-        btnUnlockSabotages = false;
-    }
-
-    if (AutoRepairSabotage) {
-        void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
-        if (taskList) {
-            void* items = *(void**)((uintptr_t)taskList + 0x10);
-            int count = *(int*)((uintptr_t)taskList + 0x18);
-            bool hasSabotage = false;
-            for (int i = 0; i < count && items; i++) {
-                void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
-                if (task && *(bool*)((uintptr_t)task + OFFSET_GT_ISSABOTAGE)) {
-                    hasSabotage = true;
-                    break;
-                }
-            }
-
-            if (hasSabotage) {
-                if (!g_SabotagePending) {
-                    g_SabotagePending = true;
-                    g_SabotageDetectedTime = now;
-                } else {
-                    auto waitTime = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_SabotageDetectedTime).count();
-                    if (waitTime >= 1800) {
-                        ExecuteRepairSabotage();
-                        g_SabotagePending = false;
-                    }
-                }
-            } else {
-                g_SabotagePending = false;
-            }
-        }
-    }
-
-    if (SafeAutoTasks) {
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_LastSafeTaskTime).count();
-        if (elapsed >= 5500) {
-            ExecuteCompleteSingleTask();
-            g_LastSafeTaskTime = now;
-        }
-    }
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_LastAutoTaskTime).count();
+    if (elapsed >= 100) { AutoCompleteAllTasks(); g_LastAutoTaskTime = now; }
 }
 
 void ApplyNoClip(void* instance, bool enable) {
@@ -951,7 +890,7 @@ void RenderDebugPanelBatch() {
         BatchAddText(centerX, startY, buf, COLOR_RED); startY += lineHeight;
     }
 
-    snprintf(buf, sizeof(buf), "TasksHandler:%c | RoofHandler:%c | SafeTasks:%c | RepairSabotage:%c", g_TasksHandler ? 'Y' : 'N', g_RoofHandler ? 'Y' : 'N', SafeAutoTasks ? 'Y' : 'N', AutoRepairSabotage ? 'Y' : 'N');
+    snprintf(buf, sizeof(buf), "TasksHandler:%c | RoofHandler:%c | AutoTask:%c | RemoveRoof:%c", g_TasksHandler ? 'Y' : 'N', g_RoofHandler ? 'Y' : 'N', AutoTaskComplete ? 'Y' : 'N', RemoveRoof ? 'Y' : 'N');
     BatchAddText(centerX, startY, buf, COLOR_ORANGE); startY += lineHeight;
 
     startY += 8;
@@ -1014,9 +953,7 @@ void RenderESPBatch() {
 
         if (ESPLines) {
             float lx1 = playerSx, ly1 = playerSy, lx2 = sx, ly2 = sy;
-            if (ClipLine(&lx1, &ly1, &lx2, &ly2)) {
-                BatchAddLine(lx1, ly1, lx2, ly2, color);
-            }
+            if (ClipLine(&lx1, &ly1, &lx2, &ly2)) BatchAddLine(lx1, ly1, lx2, ly2, color);
         }
 
         bool hasKill = p->hasKilledThisRound || p->confirmedKiller;
@@ -1146,8 +1083,7 @@ void Update(void *instance) {
             if (btnSetPosition) { SavedPosX = g_LocalPlayerPos.x; SavedPosY = g_LocalPlayerPos.y; TeleportX = g_LocalPlayerPos.x; TeleportY = g_LocalPlayerPos.y; btnSetPosition = false; LOGI("Position saved: %.2f, %.2f", SavedPosX, SavedPosY); }
             if (btnTeleport && TeleportTo) { Vector2 targetPos = {TeleportX, TeleportY}; TeleportTo(instance, targetPos, true); btnTeleport = false; LOGI("Teleported to: %.2f, %.2f", TeleportX, TeleportY); }
             if (btnCallEmergency && PlayerController_CallEmergency) { PlayerController_CallEmergency(instance); btnCallEmergency = false; LOGI("Emergency called"); }
-
-            HandleTasksAndSabotageLogic();
+            CheckAutoTask();
         }
         if ((ESPEnabled || DebugMode) && g_PlayerInstanceCount < MAX_PLAYERS) {
             g_PlayerInstances[g_PlayerInstanceCount].instance = instance;
@@ -1166,12 +1102,14 @@ void GameManager_Update(void* instance) {
         g_GameManager = instance;
         g_CurrentGameState = *(int*)((uintptr_t)instance + OFFSET_GM_GAMESTATE);
 
-        // 0 = InLobby, 1 = Drafting
-        isInLobby = (g_CurrentGameState <= 1);
-        isInGame = (g_CurrentGameState >= 2);
+        if (GameManager_IsInLobby) isInLobby = GameManager_IsInLobby(instance);
+        else isInLobby = (g_CurrentGameState == 0);
 
-        // 4 = Discussion, 5 = Voting, 6 = Waiting, 7 = Proceeding
-        isInVotingScreen = (g_CurrentGameState >= 4 && g_CurrentGameState <= 7);
+        if (GameManager_IsInGame) isInGame = GameManager_IsInGame(instance);
+        else isInGame = (g_CurrentGameState != 0);
+
+        if (GameManager_IsInMeeting) isInVotingScreen = GameManager_IsInMeeting(instance);
+        else isInVotingScreen = (g_CurrentGameState == 4 || g_CurrentGameState == 5);
     }
     old_GameManager_Update(instance);
 }
@@ -1227,6 +1165,22 @@ void OnExitVent(void *instance, void* vent, bool setCooldown) { old_OnExitVent(i
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) { old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown); }
 
+// UICooldownButton.Update - RVA: 0x39E27B0
+void (*old_UICooldownButton_Update)(void* instance);
+void UICooldownButton_Update(void* instance) {
+    if (instance && NoCooldown) {
+        WriteObscuredFloat((uintptr_t)instance + OFFSET_UICB_INTERNALCOOLDOWN, 0.0f);
+        WriteObscuredFloat((uintptr_t)instance + OFFSET_UICB_DEFAULTCOOLDOWN, 0.0f);
+        *(bool*)((uintptr_t)instance + OFFSET_UICB_PAUSED) = false;
+        *(bool*)((uintptr_t)instance + OFFSET_UICB_INTERACTABLE_OVERRIDE) = true;
+        *(bool*)((uintptr_t)instance + OFFSET_UICB_INTERACTABLE_OVERRIDE_EVEN_IN_CD) = true;
+        if (UICooldownButton_ForceInteractableEvenInCooldown) {
+            UICooldownButton_ForceInteractableEvenInCooldown(instance, true);
+        }
+    }
+    old_UICooldownButton_Update(instance);
+}
+
 // PlayableEntity.Despawn - RVA: 0x3E52680
 void (*old_Despawn)(void *instance);
 void Despawn(void *instance) {
@@ -1274,30 +1228,6 @@ void WallCollisionCheckHandler_OnCollisionEnter2D(void* instance, void* collisio
     old_WallCollisionCheckHandler_OnCollisionEnter2D(instance, collision);
 }
 
-// VoiceChatHandler.CanHearPlayer - RVA: 0x3844A90
-bool (*old_CanHearPlayer)(void* instance, void* targetController, void* otherPlayer, bool global);
-bool hook_CanHearPlayer(void* instance, void* targetController, void* otherPlayer, bool global) {
-    if (HearDeadVoice) return true;
-    return old_CanHearPlayer(instance, targetController, otherPlayer, global);
-}
-
-// VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x3844D80
-bool (*old_CanHearPlayerFromMeeting)(void* instance, void* otherPlayer);
-bool hook_CanHearPlayerFromMeeting(void* instance, void* otherPlayer) {
-    if (HearDeadVoice) return true;
-    return old_CanHearPlayerFromMeeting(instance, otherPlayer);
-}
-
-// ChatPanelHandler.InstantiateMessage - RVA: 0x3D8F0D4
-void (*old_InstantiateMessage)(void* instance, void* sender, void* message, bool isGhost, bool isSpectator, int translationType);
-void hook_InstantiateMessage(void* instance, void* sender, void* message, bool isGhost, bool isSpectator, int translationType) {
-    if (ReadDeadChat) {
-        isGhost = false;
-        isSpectator = false;
-    }
-    old_InstantiateMessage(instance, sender, message, isGhost, isSpectator, translationType);
-}
-
 jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
     InitESP(env);
     const char *features[] = {
@@ -1306,12 +1236,10 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Toggle_[\uE2C4]Remove Roof"),
             OBFUSCATE("Toggle_[\uE492]No Vent Cooldown"),
             OBFUSCATE("Toggle_[\uE62A]See Ghosts"),
-
             OBFUSCATE("Category_[\uE730]Movement"),
             OBFUSCATE("Toggle_[\uE73A]No Clip"),
             OBFUSCATE("Toggle_[\uED74]Drone View"),
             OBFUSCATE("SeekBar_[\uE434]Zoom Level_5_25"),
-
             OBFUSCATE("Category_[\uEBB4]ESP Settings"),
             OBFUSCATE("Toggle_[\uEBB4]ESP Enabled"),
             OBFUSCATE("Toggle_True_[\uE6D2]ESP Lines"),
@@ -1321,33 +1249,20 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Toggle_True_[\uE0A2]Edge Indicator"),
             OBFUSCATE("Toggle_True_[\uE224]Hide in Vote Screen"),
             OBFUSCATE("Toggle_[\uE224]Hide in Lobby"),
-
-            OBFUSCATE("Category_[\uE326]Voice & Chat"),
-            OBFUSCATE("Toggle_[\uE326]Hear Dead Voice"),
-            OBFUSCATE("Toggle_[\uE168]Read Dead Chat"),
-
-            OBFUSCATE("Category_[\uE242]Sabotage & Tasks"),
-            OBFUSCATE("Button_[\uE242]Unlock Sabotages"),
-            OBFUSCATE("Toggle_[\uE242]Auto Repair Sabotage (Safe)"),
-            OBFUSCATE("Button_[\uE242]Repair Sabotage Now"),
-            OBFUSCATE("Toggle_[\uEBA6]Safe Auto Tasks (5.5s)"),
-            OBFUSCATE("Button_[\uEBA6]Complete 1 Task"),
-
             OBFUSCATE("Category_[\uE31A]Teleport"),
             OBFUSCATE("InputValue_999_[\uE316]Teleport X"),
             OBFUSCATE("InputValue_999_[\uE316]Teleport Y"),
             OBFUSCATE("Button_[\uE1D6]Set Current Position"),
             OBFUSCATE("Button_[\uE2DE]Teleport Now"),
+            OBFUSCATE("Category_[\uE186]Task & Emergency"),
+            OBFUSCATE("Toggle_[\uEBA6]Auto Complete Tasks"),
             OBFUSCATE("Button_[\uE0CE]Call Emergency"),
-
             OBFUSCATE("Category_[\uE5F4]Debug Panel"),
             OBFUSCATE("Toggle_[\uE2CE]Show Debug Info"),
-
             OBFUSCATE("Category_[\uE79E]Experimental [May Not Work]"),
             OBFUSCATE("Toggle_[\uE40A]Anti-Death [LOCAL]"),
             OBFUSCATE("Toggle_[\uE628]Speed Boost [LOCAL]"),
             OBFUSCATE("SeekBar_[\uE434]Speed Multiplier_10_40"),
-
             OBFUSCATE("Category_[\uE46A]About"),
             OBFUSCATE("RichTextView_[\uE348]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
             OBFUSCATE("ButtonLink_[\uE4FC]YouTube: @anonimbiri_IsBack_https://youtube.com/@anonimbiri_IsBack"),
@@ -1378,25 +1293,16 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 12: ESPEdgeIndicator = boolean; break;
         case 13: ESPHideInVote = boolean; break;
         case 14: ESPHideInLobby = boolean; break;
-
-        case 15: HearDeadVoice = boolean; break;
-        case 16: ReadDeadChat = boolean; break;
-
-        case 17: btnUnlockSabotages = true; break;
-        case 18: AutoRepairSabotage = boolean; break;
-        case 19: btnRepairSabotageNow = true; break;
-        case 20: SafeAutoTasks = boolean; if (boolean) g_LastSafeTaskTime = std::chrono::steady_clock::now(); break;
-        case 21: btnCompleteOneTask = true; break;
-
-        case 22: TeleportX = (float)value; break;
-        case 23: TeleportY = (float)value; break;
-        case 24: btnSetPosition = true; break;
-        case 25: btnTeleport = true; break;
-        case 26: btnCallEmergency = true; break;
-        case 27: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
-        case 28: AntiDeath = boolean; break;
-        case 29: SpeedHack = boolean; break;
-        case 30: SpeedMultiplier = (float)value / 10.0f; break;
+        case 15: TeleportX = (float)value; break;
+        case 16: TeleportY = (float)value; break;
+        case 17: btnSetPosition = true; break;
+        case 18: btnTeleport = true; break;
+        case 19: AutoTaskComplete = boolean; if (boolean) g_LastAutoTaskTime = std::chrono::steady_clock::now(); break;
+        case 20: btnCallEmergency = true; break;
+        case 21: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
+        case 22: AntiDeath = boolean; break;
+        case 23: SpeedHack = boolean; break;
+        case 24: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -1408,10 +1314,7 @@ void hack_thread() {
     do { sleep(1); g_il2cppELF = ElfScanner::createWithPath(targetLibName); } while (!g_il2cppELF.isValid());
     LOGI("%s loaded", (const char*)targetLibName);
     void* il2cppHandle = dlopen("libil2cpp.so", RTLD_NOW);
-    if (il2cppHandle) {
-        il2cpp_string_new_func = (il2cpp_string_new_t)dlsym(il2cppHandle, "il2cpp_string_new");
-        LOGI("il2cpp_string_new: %p", il2cpp_string_new_func);
-    }
+    if (il2cppHandle) { il2cpp_string_new_func = (il2cpp_string_new_t)dlsym(il2cppHandle, "il2cpp_string_new"); LOGI("il2cpp_string_new: %p", il2cpp_string_new_func); }
 
 #if defined(__aarch64__)
     // GameManager.Update - RVA: 0x3AD9E54
@@ -1425,6 +1328,18 @@ void hack_thread() {
 
     // GameManager.IsInMeeting - RVA: 0x3ADC5D4
     GameManager_IsInMeeting = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3ADC5D4")));
+
+    // ObscuredFloat.Encrypt - RVA: 0x36905C4
+    ObscuredFloat_Encrypt = (int (*)(float, int))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x36905C4")));
+
+    // ObscuredFloat.Decrypt - RVA: 0x3690614
+    ObscuredFloat_Decrypt = (float (*)(int, int))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3690614")));
+
+    // UICooldownButton.ForceInteractableEvenInCooldown - RVA: 0x39E261C
+    UICooldownButton_ForceInteractableEvenInCooldown = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x39E261C")));
+
+    // UICooldownButton.Update - RVA: 0x39E27B0
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x39E27B0")), UICooldownButton_Update, old_UICooldownButton_Update);
 
     // PlayableEntity.Update - RVA: 0x3E4FC30
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E4FC30")), Update, old_Update);
@@ -1498,16 +1413,7 @@ void hack_thread() {
     // WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x37E4400
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x37E4400")), WallCollisionCheckHandler_OnCollisionEnter2D, old_WallCollisionCheckHandler_OnCollisionEnter2D);
 
-    // VoiceChatHandler.CanHearPlayer - RVA: 0x3844A90
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3844A90")), hook_CanHearPlayer, old_CanHearPlayer);
-
-    // VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x3844D80
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3844D80")), hook_CanHearPlayerFromMeeting, old_CanHearPlayerFromMeeting);
-
-    // ChatPanelHandler.InstantiateMessage - RVA: 0x3D8F0D4
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8F0D4")), hook_InstantiateMessage, old_InstantiateMessage);
-
-    LOGI("All features and hooks installed!");
+    LOGI("All hooks installed!");
 #endif
     LOGI("Done");
 }

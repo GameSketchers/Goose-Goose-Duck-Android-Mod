@@ -3,7 +3,9 @@ package com.android.support;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.AssetFileDescriptor;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.widget.Toast;
 
 import java.io.File;
@@ -15,24 +17,18 @@ public class Main {
         System.loadLibrary("anonimbiri");
     }
 
-    private static final String OBB_FILE_NAME = "main.200561.com.Gaggle.fun.GooseGooseDuck.obb";
-
     private static native void CheckOverlayPermission(Context context);
 
     public static void Start(final Context context) {
         CrashHandler.init(context, false);
 
-        // OBB kontrolü
         if (!isObbInstalled(context) && isObbInAssets(context)) {
-            // OBB kurulumu gerekli - Activity aç
             Intent intent = new Intent(context, ObbInstallerActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
-            // Activity bitince tekrar Start çağrılacak
             return;
         }
 
-        // OBB tamam, orijinal akışa devam
         CheckOverlayPermission(context);
     }
 
@@ -47,18 +43,33 @@ public class Main {
         }
     }
 
+    private static String getObbFileName(Context context) {
+        try {
+            PackageManager pm = context.getPackageManager();
+            PackageInfo pInfo = pm.getPackageInfo(context.getPackageName(), 0);
+            long versionCode;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                versionCode = pInfo.getLongVersionCode();
+            } else {
+                versionCode = pInfo.versionCode;
+            }
+            return "main." + versionCode + "." + context.getPackageName() + ".obb";
+        } catch (Exception e) {
+            return "main.0." + context.getPackageName() + ".obb";
+        }
+    }
+
     private static boolean isObbInstalled(Context context) {
         try {
             File obbDir = context.getObbDir();
             if (!obbDir.exists()) return false;
 
-            // Belirli dosya
-            File obbFile = new File(obbDir, OBB_FILE_NAME);
+            String obbFileName = getObbFileName(context);
+            File obbFile = new File(obbDir, obbFileName);
             if (obbFile.exists() && obbFile.length() > 1000) {
                 return true;
             }
 
-            // Herhangi bir .obb
             File[] files = obbDir.listFiles();
             if (files != null) {
                 for (File file : files) {
@@ -75,7 +86,8 @@ public class Main {
 
     private static boolean isObbInAssets(Context context) {
         try {
-            InputStream is = context.getAssets().open(OBB_FILE_NAME);
+            String obbFileName = getObbFileName(context);
+            InputStream is = context.getAssets().open(obbFileName);
             is.close();
             return true;
         } catch (Exception e) {

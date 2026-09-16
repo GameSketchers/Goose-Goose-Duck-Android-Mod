@@ -4,7 +4,6 @@ import re
 import sys
 import shutil
 
-# Windows terminal TrueColor/ANSI desteğini aktif et
 if os.name == 'nt':
     os.system('')
 
@@ -24,7 +23,6 @@ class C:
 def rgb(r, g, b):
     return f"\033[38;2;{r};{g};{b}m"
 
-# Target Field Mappings categorized by class name
 FIELD_TARGETS = {
     "PlayableEntity": {
         "OFFSET_PE_ENTITYNUMBER": [r"\bint\s+entityNumber\b"],
@@ -82,14 +80,17 @@ FIELD_TARGETS = {
     },
     "GameTask": {
         "OFFSET_GT_TASKID": [r"\bstring\s+taskId\b"],
+        "OFFSET_GT_ISSABOTAGE": [r"\bbool\s+isSabotage\b"],
         "OFFSET_GT_ISFAKETASK": [r"\bbool\s+isFakeTask\b"]
     },
     "WallCollisionCheckHandler": {
         "OFFSET_WCCH_INWALL": [r"\bbool\s+inWall\b"]
+    },
+    "GameManager": {
+        "OFFSET_GM_GAMESTATE": [r"\bGameManager\.GameState\s+gameState\b", r"\bGameState\s+gameState\b"]
     }
 }
 
-# Target Method Signatures categorized by (Class, MethodName)
 METHOD_TARGETS = {
     ("PlayableEntity", "Update"): r"void\s+Update\s*\(",
     ("PlayableEntity", "LateUpdate"): r"void\s+LateUpdate\s*\(",
@@ -121,7 +122,17 @@ METHOD_TARGETS = {
     ("PlayerController", "CallEmergency"): r"void\s+CallEmergency\s*\(",
 
     ("Collider2D", "set_isTrigger"): r"void\s+set_isTrigger\s*\(",
-    ("WallCollisionCheckHandler", "OnCollisionEnter2D"): r"void\s+OnCollisionEnter2D\s*\("
+    ("WallCollisionCheckHandler", "OnCollisionEnter2D"): r"void\s+OnCollisionEnter2D\s*\(",
+
+    ("GameManager", "Update"): r"void\s+Update\s*\(",
+    ("GameManager", "IsInGame"): r"bool\s+IsInGame\s*\(",
+    ("GameManager", "IsInLobby"): r"bool\s+IsInLobby\s*\(",
+    ("GameManager", "IsInMeeting"): r"bool\s+IsInMeeting\s*\(",
+
+    ("VoiceChatHandler", "CanHearPlayer"): r"bool\s+CanHearPlayer\s*\(",
+    ("VoiceChatHandler", "CanHearPlayerFromMeeting"): r"bool\s+CanHearPlayerFromMeeting\s*\(",
+
+    ("ChatPanelHandler", "InstantiateMessage"): r"void\s+InstantiateMessage\s*\("
 }
 
 def ask_for_path(prompt_text, default_filename):
@@ -244,12 +255,10 @@ def update_cpp(cpp_path, typedefs, fields, methods):
             total_changes += (c1 + c2 + c3)
             print(f"    {C.GREEN}[+]{C.RESET} {method_key:<50} -> {C.YELLOW}{new_rva}{C.RESET}")
 
-    # Create a safe backup of the original file
     backup_path = cpp_path + ".bak"
     shutil.copyfile(cpp_path, backup_path)
     print(f"\n{C.BLUE}[✓] Backup created at: '{backup_path}'{C.RESET}")
 
-    # Write updated content
     with open(cpp_path, "w", encoding="utf-8") as f:
         f.write(content)
 
