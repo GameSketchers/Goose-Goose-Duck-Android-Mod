@@ -46,7 +46,6 @@ FIELD_TARGETS = {
         "OFFSET_PE_ISINPELICAN": [r"\bbool\s+isInPelican\b"],
         "OFFSET_PE_ISMORPHED": [r"\bbool\s+isMorphed\b"],
         "OFFSET_PE_ISSPECTATOR": [r"\bbool\s+isSpectator\b"],
-        "OFFSET_PE_RIGIDBODY": [r"\bRigidbody2D\s+rigidBody\b", r"\bRigidbody2D\s+rigidbody\b"],
         "OFFSET_PE_TRANSFORMVIEW": [r"\bBetterPhotonTransformView\s+transformView\b"],
         "OFFSET_PE_BODYCOLLIDER": [r"\bCapsuleCollider2D\s+bodyCollider\b"],
         "OFFSET_PE_PLAYERCOLLIDER": [r"\bCapsuleCollider2D\s+playerCollider\b"],
@@ -54,6 +53,12 @@ FIELD_TARGETS = {
         "OFFSET_PE_WALLCOLLISIONHANDLER": [r"\bWallCollisionCheckHandler\s+wallCollisionCheckHandler\b"],
         "OFFSET_PE_CONFINECOLLIDER": [r"\bBoxCollider2D\s+confineCollider\b"],
         "OFFSET_PE_STATIC_DEADPLAYERSCOUNT": [r"\bstatic\s+int\s+deadPlayersCount\b"]
+    },
+    "PlayerController": {
+        "OFFSET_PC_READYSTATE": [r"\bPlayerController\.EReadyState\s+readyState\b", r"\bEReadyState\s+readyState\b"]
+    },
+    "PlayerProperties": {
+        "OFFSET_PP_READYSTATE": [r"\bint\s+readyState\b"]
     },
     "LocalPlayer": {
         "OFFSET_LP_MAINCAMERA": [r"\bCamera\s+mainCamera\b"],
@@ -81,6 +86,7 @@ FIELD_TARGETS = {
     "GameTask": {
         "OFFSET_GT_TASKID": [r"\bstring\s+taskId\b"],
         "OFFSET_GT_ISSABOTAGE": [r"\bbool\s+isSabotage\b"],
+        "OFFSET_GT_ISIMPOSTORTASK": [r"\bbool\s+isImpostorTask\b"],
         "OFFSET_GT_ISFAKETASK": [r"\bbool\s+isFakeTask\b"]
     },
     "WallCollisionCheckHandler": {
@@ -121,6 +127,10 @@ METHOD_TARGETS = {
 
     ("PlayerController", "CallEmergency"): r"void\s+CallEmergency\s*\(",
 
+    ("PlayerPropertiesManager", "Initialize"): r"void\s+Initialize\s*\(",
+    ("PlayerPropertiesManager", "ChangeReadyState"): r"void\s+ChangeReadyState\s*\(",
+    ("PlayerPropertiesManager", "GetUserProperties"): r"PlayerProperties\s+GetUserProperties\s*\(",
+
     ("Collider2D", "set_isTrigger"): r"void\s+set_isTrigger\s*\(",
     ("WallCollisionCheckHandler", "OnCollisionEnter2D"): r"void\s+OnCollisionEnter2D\s*\(",
 
@@ -130,9 +140,7 @@ METHOD_TARGETS = {
     ("GameManager", "IsInMeeting"): r"bool\s+IsInMeeting\s*\(",
 
     ("VoiceChatHandler", "CanHearPlayer"): r"bool\s+CanHearPlayer\s*\(",
-    ("VoiceChatHandler", "CanHearPlayerFromMeeting"): r"bool\s+CanHearPlayerFromMeeting\s*\(",
-
-    ("ChatPanelHandler", "InstantiateMessage"): r"void\s+InstantiateMessage\s*\("
+    ("VoiceChatHandler", "CanHearPlayerFromMeeting"): r"bool\s+CanHearPlayerFromMeeting\s*\("
 }
 
 def ask_for_path(prompt_text, default_filename):

@@ -20,7 +20,6 @@
 
 #define targetLibName OBFUSCATE("libil2cpp.so")
 
-// ESP Ayarları
 bool ESPEnabled = true;
 bool ESPLines = true;
 bool ESPBox = true;
@@ -32,18 +31,16 @@ bool ESPHideInLobby = false;
 bool SeeGhosts = true;
 bool DebugMode = false;
 
-// Görev & Sabotaj Ayarları
 bool SafeAutoTasks = false;
 bool AutoRepairSabotage = false;
 bool btnRepairSabotageNow = false;
 bool btnCompleteOneTask = false;
 bool btnUnlockSabotages = false;
 
-// İletişim (Ölüleri Duyma & Okuma)
 bool HearDeadVoice = false;
-bool ReadDeadChat = false;
+bool HearFarPlayers = false;
 
-// Hareket & Diğer
+bool AutoReady = false;
 bool AntiDeath = false;
 bool UnlimitedVision = false;
 bool NoCooldown = false;
@@ -65,6 +62,7 @@ bool btnCallEmergency = false;
 void* g_TasksHandler = NULL;
 void* g_RoofHandler = NULL;
 void* g_GameManager = NULL;
+void* g_PlayerPropertiesManager = NULL;
 bool g_RoofRemovedThisRound = false;
 
 std::chrono::steady_clock::time_point g_LastSafeTaskTime;
@@ -134,6 +132,9 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_CONFINECOLLIDER    0x2F8
 #define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
 
+// PlayerController (TypeDefIndex: 6407)
+#define OFFSET_PC_READYSTATE         0x388
+
 // LocalPlayer (TypeDefIndex: 6370)
 #define OFFSET_LP_MAINCAMERA              0x78
 #define OFFSET_LP_STATECAMERA             0x80
@@ -164,10 +165,14 @@ struct Quaternion { float x, y, z, w; };
 // GameTask (TypeDefIndex: 5656)
 #define OFFSET_GT_TASKID             0x10
 #define OFFSET_GT_ISSABOTAGE         0x53
+#define OFFSET_GT_ISIMPOSTORTASK     0x80
 #define OFFSET_GT_ISFAKETASK         0xD1
 
 // WallCollisionCheckHandler (TypeDefIndex: 1106)
 #define OFFSET_WCCH_INWALL           0x20
+
+// PlayerProperties (TypeDefIndex: 1537)
+#define OFFSET_PP_READYSTATE         0x14
 
 struct PlayerInfo {
     void* instance;
@@ -307,6 +312,12 @@ bool (*GameManager_IsInLobby)(void*) = NULL;
 // GameManager.IsInMeeting - RVA: 0x3ADC5D4
 bool (*GameManager_IsInMeeting)(void*) = NULL;
 
+// PlayerPropertiesManager.ChangeReadyState - RVA: 0x3AC4978
+void (*PlayerPropertiesManager_ChangeReadyState)(void*, int) = NULL;
+
+// PlayerPropertiesManager.GetUserProperties - RVA: 0x3AC5A98
+void* (*PlayerPropertiesManager_GetUserProperties)(void*) = NULL;
+
 typedef void* (*il2cpp_string_new_t)(const char*);
 il2cpp_string_new_t il2cpp_string_new_func = NULL;
 
@@ -404,7 +415,7 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
 }
 
 float GetESPScale() {
-    float orthoSize = g_DefaultOrthoSize;
+    float orthoSize = GetCurrentOrthoSize();
     if (orthoSize <= 0) orthoSize = 5.0f;
     return g_ScreenHeight / (orthoSize * 2.0f);
 }
@@ -554,22 +565,16 @@ RoleInfo GetRoleInfo(int roleId) {
 void ApplyDroneViewDelayed() {
     if (!localPlayerObject || !OverrideOrthographicSize) return;
     if (DroneView) {
-        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) { g_DroneViewDelay++; return; }
-        if (!g_DroneViewInitialized) {
-            g_DroneViewInitialized = true;
-            g_DroneViewReady = true;
-            OverrideOrthographicSize(localPlayerObject, DroneZoom);
-        }
-        else if (g_DroneViewReady) {
-            OverrideOrthographicSize(localPlayerObject, DroneZoom);
-        }
+        g_DroneViewReady = true;
+        g_DroneViewInitialized = true;
+        OverrideOrthographicSize(localPlayerObject, DroneZoom);
     }
 }
 
 void ResetDroneViewDelay() {
     g_DroneViewDelay = 0;
-    g_DroneViewReady = false;
-    g_DroneViewInitialized = false;
+    g_DroneViewReady = true;
+    g_DroneViewInitialized = true;
     g_ESPStabilized = false;
     g_FrameCount = 0;
 }
@@ -725,7 +730,6 @@ void ExecuteRepairSabotage() {
                 TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
                 LOGI("Sabotage repaired safely: %s", taskId);
             }
-            break;
         }
     }
     if (TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
@@ -758,7 +762,6 @@ void ExecuteCompleteSingleTask() {
     }
 }
 
-// Sabotaj görevlerini tamamlayarak sabotajları açma
 void ExecuteUnlockSabotages() {
     if (!g_TasksHandler || !TasksHandler_CompleteTask || !il2cpp_string_new_func) return;
     void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
@@ -770,14 +773,14 @@ void ExecuteUnlockSabotages() {
     for (int i = 0; i < count; i++) {
         void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
         if (!task) continue;
-        bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
-        if (isFake) {
+        bool isImpostor = *(bool*)((uintptr_t)task + OFFSET_GT_ISIMPOSTORTASK);
+        if (isImpostor) {
             char taskId[64]; GetTaskId(task, taskId, sizeof(taskId));
             if (taskId[0] == '\0') continue;
             void* taskIdStr = il2cpp_string_new_func(taskId);
             if (taskIdStr) {
                 TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-                LOGI("Sabotage fake task completed: %s", taskId);
+                LOGI("Sabotage impostor task completed: %s", taskId);
             }
         }
     }
@@ -838,6 +841,28 @@ void HandleTasksAndSabotageLogic() {
             ExecuteCompleteSingleTask();
             g_LastSafeTaskTime = now;
         }
+    }
+}
+
+void HandleAutoReady() {
+    if (!AutoReady || !isInLobby || !g_PlayerPropertiesManager || !PlayerPropertiesManager_ChangeReadyState) return;
+
+    if (localPlayerInstance) {
+        int readyState = *(int*)((uintptr_t)localPlayerInstance + OFFSET_PC_READYSTATE);
+        if (readyState == 1) return;
+    } else if (PlayerPropertiesManager_GetUserProperties) {
+        void* userProps = PlayerPropertiesManager_GetUserProperties(g_PlayerPropertiesManager);
+        if (userProps) {
+            int readyState = *(int*)((uintptr_t)userProps + OFFSET_PP_READYSTATE);
+            if (readyState == 1) return;
+        }
+    }
+
+    static auto lastReadyCheck = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastReadyCheck).count() >= 1000) {
+        PlayerPropertiesManager_ChangeReadyState(g_PlayerPropertiesManager, 1);
+        lastReadyCheck = now;
     }
 }
 
@@ -939,7 +964,7 @@ void RenderDebugPanelBatch() {
     snprintf(buf, sizeof(buf), "GM:%c | State:%s(%d) | InGame:%c | Lobby:%c | Vote:%c | Players:%d | Dead:%d", g_GameManager ? 'Y' : 'N', GetGameStateName(g_CurrentGameState), g_CurrentGameState, isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', isInVotingScreen ? 'Y' : 'N', g_RenderPlayerCount, g_DeadPlayersCount);
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
-    snprintf(buf, sizeof(buf), "NoClip:%c", NoClip ? 'Y' : 'N');
+    snprintf(buf, sizeof(buf), "NoClip:%c | AutoReady:%c", NoClip ? 'Y' : 'N', AutoReady ? 'Y' : 'N');
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
     RoleInfo myRole = GetRoleInfo(localPlayerRole);
@@ -1148,6 +1173,7 @@ void Update(void *instance) {
             if (btnCallEmergency && PlayerController_CallEmergency) { PlayerController_CallEmergency(instance); btnCallEmergency = false; LOGI("Emergency called"); }
 
             HandleTasksAndSabotageLogic();
+            HandleAutoReady();
         }
         if ((ESPEnabled || DebugMode) && g_PlayerInstanceCount < MAX_PLAYERS) {
             g_PlayerInstances[g_PlayerInstanceCount].instance = instance;
@@ -1170,15 +1196,17 @@ void GameManager_Update(void* instance) {
         isInLobby = (g_CurrentGameState <= 1);
         isInGame = (g_CurrentGameState >= 2);
 
-        // 4 = Discussion, 5 = Voting, 6 = Waiting, 7 = Proceeding
-        isInVotingScreen = (g_CurrentGameState >= 4 && g_CurrentGameState <= 7);
+        // 3 = Opening, 4 = Discussion, 5 = Voting, 6 = Waiting, 7 = Proceeding
+        isInVotingScreen = (g_CurrentGameState >= 3 && g_CurrentGameState <= 7);
     }
     old_GameManager_Update(instance);
 }
 
 // PlayableEntity.LateUpdate - RVA: 0x3E509E8
 void (*old_LateUpdate)(void *instance);
-void LateUpdate(void *instance) { old_LateUpdate(instance); }
+void LateUpdate(void *instance) {
+    old_LateUpdate(instance);
+}
 
 // PlayableEntity.TurnIntoGhost - RVA: 0x3E5B99C
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
@@ -1213,6 +1241,13 @@ float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
     float speed = old_GetPlayerSpeed(instance);
     return SpeedHack ? speed * SpeedMultiplier : speed;
+}
+
+// PlayerPropertiesManager.Initialize - RVA: 0x3AC4878
+void (*old_PlayerPropertiesManager_Initialize)(void* instance) = NULL;
+void hook_PlayerPropertiesManager_Initialize(void* instance) {
+    if (instance) g_PlayerPropertiesManager = instance;
+    old_PlayerPropertiesManager_Initialize(instance);
 }
 
 // GGDRole.OnEnterVent - RVA: 0x3CD0438
@@ -1284,18 +1319,8 @@ bool hook_CanHearPlayer(void* instance, void* targetController, void* otherPlaye
 // VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x3844D80
 bool (*old_CanHearPlayerFromMeeting)(void* instance, void* otherPlayer);
 bool hook_CanHearPlayerFromMeeting(void* instance, void* otherPlayer) {
-    if (HearDeadVoice) return true;
+    if (HearFarPlayers) return true;
     return old_CanHearPlayerFromMeeting(instance, otherPlayer);
-}
-
-// ChatPanelHandler.InstantiateMessage - RVA: 0x3D8F0D4
-void (*old_InstantiateMessage)(void* instance, void* sender, void* message, bool isGhost, bool isSpectator, int translationType);
-void hook_InstantiateMessage(void* instance, void* sender, void* message, bool isGhost, bool isSpectator, int translationType) {
-    if (ReadDeadChat) {
-        isGhost = false;
-        isSpectator = false;
-    }
-    old_InstantiateMessage(instance, sender, message, isGhost, isSpectator, translationType);
 }
 
 jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
@@ -1310,7 +1335,7 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Category_[\uE730]Movement"),
             OBFUSCATE("Toggle_[\uE73A]No Clip"),
             OBFUSCATE("Toggle_[\uED74]Drone View"),
-            OBFUSCATE("SeekBar_[\uE434]Zoom Level_5_25"),
+            OBFUSCATE("SeekBar_[\uE434]Zoom Level_5_40"),
 
             OBFUSCATE("Category_[\uEBB4]ESP Settings"),
             OBFUSCATE("Toggle_[\uEBB4]ESP Enabled"),
@@ -1322,23 +1347,25 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Toggle_True_[\uE224]Hide in Vote Screen"),
             OBFUSCATE("Toggle_[\uE224]Hide in Lobby"),
 
-            OBFUSCATE("Category_[\uE326]Voice & Chat"),
+            OBFUSCATE("Category_[\uE326]Voice"),
             OBFUSCATE("Toggle_[\uE326]Hear Dead Voice"),
-            OBFUSCATE("Toggle_[\uE168]Read Dead Chat"),
+            OBFUSCATE("Toggle_[\uE326]Hear Far Players"),
 
             OBFUSCATE("Category_[\uE242]Sabotage & Tasks"),
             OBFUSCATE("Button_[\uE242]Unlock Sabotages"),
-            OBFUSCATE("Toggle_[\uE242]Auto Repair Sabotage (Safe)"),
+            OBFUSCATE("Toggle_[\uE242]Auto Repair Sabotage"),
             OBFUSCATE("Button_[\uE242]Repair Sabotage Now"),
-            OBFUSCATE("Toggle_[\uEBA6]Safe Auto Tasks (5.5s)"),
+            OBFUSCATE("RichTextView_[\uE4E0]<b>Warning:</b> Auto Tasks has a ban risk! Think twice before using it."),
+            OBFUSCATE("Toggle_[\uEBA6]Auto Tasks"),
             OBFUSCATE("Button_[\uEBA6]Complete 1 Task"),
 
-            OBFUSCATE("Category_[\uE31A]Teleport"),
+            OBFUSCATE("Category_[\uE31A]Miscellaneous"),
             OBFUSCATE("InputValue_999_[\uE316]Teleport X"),
             OBFUSCATE("InputValue_999_[\uE316]Teleport Y"),
             OBFUSCATE("Button_[\uE1D6]Set Current Position"),
             OBFUSCATE("Button_[\uE2DE]Teleport Now"),
             OBFUSCATE("Button_[\uE0CE]Call Emergency"),
+            OBFUSCATE("Toggle_[\uE186]Auto Ready (Lobby)"),
 
             OBFUSCATE("Category_[\uE5F4]Debug Panel"),
             OBFUSCATE("Toggle_[\uE2CE]Show Debug Info"),
@@ -1380,7 +1407,7 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 14: ESPHideInLobby = boolean; break;
 
         case 15: HearDeadVoice = boolean; break;
-        case 16: ReadDeadChat = boolean; break;
+        case 16: HearFarPlayers = boolean; break;
 
         case 17: btnUnlockSabotages = true; break;
         case 18: AutoRepairSabotage = boolean; break;
@@ -1393,10 +1420,11 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 24: btnSetPosition = true; break;
         case 25: btnTeleport = true; break;
         case 26: btnCallEmergency = true; break;
-        case 27: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
-        case 28: AntiDeath = boolean; break;
-        case 29: SpeedHack = boolean; break;
-        case 30: SpeedMultiplier = (float)value / 10.0f; break;
+        case 27: AutoReady = boolean; break;
+        case 28: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
+        case 29: AntiDeath = boolean; break;
+        case 30: SpeedHack = boolean; break;
+        case 31: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -1425,6 +1453,15 @@ void hack_thread() {
 
     // GameManager.IsInMeeting - RVA: 0x3ADC5D4
     GameManager_IsInMeeting = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3ADC5D4")));
+
+    // PlayerPropertiesManager.Initialize - RVA: 0x3AC4878
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3AC4878")), hook_PlayerPropertiesManager_Initialize, old_PlayerPropertiesManager_Initialize);
+
+    // PlayerPropertiesManager.ChangeReadyState - RVA: 0x3AC4978
+    PlayerPropertiesManager_ChangeReadyState = (void (*)(void*, int))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AC4978")));
+
+    // PlayerPropertiesManager.GetUserProperties - RVA: 0x3AC5A98
+    PlayerPropertiesManager_GetUserProperties = (void* (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AC5A98")));
 
     // PlayableEntity.Update - RVA: 0x3E4FC30
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E4FC30")), Update, old_Update);
@@ -1503,9 +1540,6 @@ void hack_thread() {
 
     // VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x3844D80
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3844D80")), hook_CanHearPlayerFromMeeting, old_CanHearPlayerFromMeeting);
-
-    // ChatPanelHandler.InstantiateMessage - RVA: 0x3D8F0D4
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3D8F0D4")), hook_InstantiateMessage, old_InstantiateMessage);
 
     LOGI("All features and hooks installed!");
 #endif
