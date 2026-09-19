@@ -36,6 +36,7 @@ FIELD_TARGETS = {
         "OFFSET_PE_HASKILLED": [r"\bbool\s+hasKilledThisRound\b", r"\bbool\s+hasKilled\b"],
         "OFFSET_PE_TEAMID": [r"\bint\s+teamId\b"],
         "OFFSET_PE_FOGOFWAR": [r"\bbool\s+fogOfWarEnabled\b", r"\bbool\s+fogOfWar\b"],
+        "OFFSET_PE_KILLEDLOCATION": [r"\bVector2\s+killedLocation\b"],
         "OFFSET_PE_ISRUNNING": [r"\bbool\s+isRunning\b"],
         "OFFSET_PE_ISGHOST": [r"\bbool\s+isGhost\b"],
         "OFFSET_PE_ISINFECTED": [r"\bbool\s+isInfected\b"],
@@ -130,6 +131,8 @@ METHOD_TARGETS = {
     ("PlayerPropertiesManager", "Initialize"): r"void\s+Initialize\s*\(",
     ("PlayerPropertiesManager", "ChangeReadyState"): r"void\s+ChangeReadyState\s*\(",
     ("PlayerPropertiesManager", "GetUserProperties"): r"PlayerProperties\s+GetUserProperties\s*\(",
+
+    ("MapManager", "Internal_OnMapLoad"): r"void\s+Internal_OnMapLoad\s*\(",
 
     ("Collider2D", "set_isTrigger"): r"void\s+set_isTrigger\s*\(",
     ("WallCollisionCheckHandler", "OnCollisionEnter2D"): r"void\s+OnCollisionEnter2D\s*\(",

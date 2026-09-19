@@ -11,6 +11,7 @@
 #include <dlfcn.h>
 #include <cmath>
 #include <chrono>
+#include <atomic>
 #include "Includes/Logger.h"
 #include "Includes/obfuscate.h"
 #include "Includes/Utils.hpp"
@@ -19,6 +20,13 @@
 #include "Includes/Macros.h"
 
 #define targetLibName OBFUSCATE("libil2cpp.so")
+
+// Mini Map Ayarları
+bool MiniMapEnabled = false;
+bool MiniMapShowPlayers = true;
+bool MiniMapShowDead = true;
+bool MiniMapTouchTP = true;
+bool MiniMapHideInVote = true;
 
 bool ESPEnabled = true;
 bool ESPLines = true;
@@ -51,13 +59,12 @@ float DroneZoom = 5.0f;
 bool SpeedHack = false;
 float SpeedMultiplier = 1.5f;
 
-float TeleportX = 0.0f;
-float TeleportY = 0.0f;
-float SavedPosX = 0.0f;
-float SavedPosY = 0.0f;
-bool btnTeleport = false;
-bool btnSetPosition = false;
 bool btnCallEmergency = false;
+
+// Thread-safe teleport kuyruğu (Crash logundaki SIGSEGV'i engeller)
+std::atomic<bool> g_PendingDirectTP(false);
+std::atomic<float> g_TargetDirectTPX(0.0f);
+std::atomic<float> g_TargetDirectTPY(0.0f);
 
 void* g_TasksHandler = NULL;
 void* g_RoofHandler = NULL;
@@ -78,6 +85,7 @@ bool isInGame = false;
 bool isInLobby = true;
 int localPlayerRole = 0;
 int g_CurrentGameState = 0;
+int g_CurrentMapId = 0;
 
 int g_DroneViewDelay = 0;
 #define DRONE_VIEW_DELAY_FRAMES 60
@@ -115,6 +123,7 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_HASKILLED          0xC5
 #define OFFSET_PE_TEAMID             0xDC
 #define OFFSET_PE_FOGOFWAR           0xF4
+#define OFFSET_PE_KILLEDLOCATION     0x100
 #define OFFSET_PE_ISRUNNING          0x121
 #define OFFSET_PE_ISGHOST            0x178
 #define OFFSET_PE_ISINFECTED         0x17E
@@ -181,7 +190,9 @@ struct PlayerInfo {
 };
 
 struct PlayerData {
+    void* instance;
     Vector2 position;
+    Vector2 killedLocation;
     bool isGhost;
     bool isLocal;
     int role;
@@ -235,6 +246,9 @@ bool g_ESPStabilized = false;
 char g_ESPBatchBuffer[MAX_ESP_BUFFER];
 int g_ESPBatchOffset = 0;
 
+char g_MiniMapBatchBuffer[8192];
+static bool s_LastMiniMapState = false;
+
 inline void BatchClear() {
     g_ESPBatchOffset = 0;
     g_ESPBatchBuffer[0] = '\0';
@@ -277,6 +291,14 @@ jmethodID g_BatchDrawMethod = NULL;
 jmethodID g_SetESPEnabledMethod = NULL;
 jmethodID g_GetScreenWidthMethod = NULL;
 jmethodID g_GetScreenHeightMethod = NULL;
+
+jmethodID g_SetMiniMapVisibleMethod = NULL;
+jmethodID g_SetMiniMapIdMethod = NULL;
+jmethodID g_UpdateMiniMapBatchMethod = NULL;
+jmethodID g_SetMapShowPlayersMethod = NULL;
+jmethodID g_SetMapShowDeadBodiesMethod = NULL;
+jmethodID g_SetMapTouchTeleportMethod = NULL;
+
 bool g_ESPReady = false;
 
 // LocalPlayer.OverrideOrthographicSize - RVA: 0x3E455BC
@@ -330,6 +352,13 @@ JNIEnv* GetJNIEnv() {
     return env;
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_com_android_support_MiniMapView_nativeDirectTeleport(JNIEnv *env, jclass clazz, jfloat x, jfloat y) {
+    g_TargetDirectTPX.store(x);
+    g_TargetDirectTPY.store(y);
+    g_PendingDirectTP.store(true);
+}
+
 Vector2 GetCameraPosition2D() {
     if (g_CameraPositionValid) return {g_CameraPosition.x, g_CameraPosition.y};
     return g_LocalPlayerPos;
@@ -377,6 +406,36 @@ int GetRoleType(void* instance) {
     void* rolePtr = *(void**)((uintptr_t)instance + OFFSET_PE_PLAYERROLE);
     if (!rolePtr) return -1;
     return (int)*(short*)((uintptr_t)rolePtr + OFFSET_ROLE_TYPE);
+}
+
+int GetPlayerExactColor(void* instance) {
+    if (!instance) return 0xFFFFFFFF;
+
+    static const int GoosePalette[] = {
+            0xFFFF2020, // 0: Kırmızı
+            0xFF2060FF, // 1: Mavi
+            0xFF20D040, // 2: Yeşil
+            0xFFFF80D0, // 3: Pembe
+            0xFFFF9020, // 4: Turuncu
+            0xFFFFFF30, // 5: Sarı
+            0xFF404040, // 6: Siyah
+            0xFFF0F0F0, // 7: Beyaz
+            0xFF9040C0, // 8: Mor
+            0xFF905030, // 9: Kahverengi
+            0xFF20E0E0, // 10: Camgöbeği (Cyan)
+            0xFF80FF80, // 11: Açık Yeşil
+            0xFF708090, // 12: Gri
+            0xFFFFB6C1, // 13: Açık Pembe
+            0xFFDDA0DD, // 14: Erik (Plum)
+            0xFFFFD700  // 15: Altın Sarısı
+    };
+
+    int entityNum = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
+    if (entityNum >= 0 && entityNum < 16) {
+        return GoosePalette[entityNum];
+    }
+
+    return 0xFFFFFFFF;
 }
 
 float GetCurrentOrthoSize() {
@@ -565,16 +624,24 @@ RoleInfo GetRoleInfo(int roleId) {
 void ApplyDroneViewDelayed() {
     if (!localPlayerObject || !OverrideOrthographicSize) return;
     if (DroneView) {
-        g_DroneViewReady = true;
-        g_DroneViewInitialized = true;
-        OverrideOrthographicSize(localPlayerObject, DroneZoom);
+        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) {
+            g_DroneViewDelay++;
+            return;
+        }
+        if (!g_DroneViewInitialized) {
+            g_DroneViewInitialized = true;
+            g_DroneViewReady = true;
+            OverrideOrthographicSize(localPlayerObject, DroneZoom);
+        } else if (g_DroneViewReady) {
+            OverrideOrthographicSize(localPlayerObject, DroneZoom);
+        }
     }
 }
 
 void ResetDroneViewDelay() {
     g_DroneViewDelay = 0;
-    g_DroneViewReady = true;
-    g_DroneViewInitialized = true;
+    g_DroneViewReady = false;
+    g_DroneViewInitialized = false;
     g_ESPStabilized = false;
     g_FrameCount = 0;
 }
@@ -600,9 +667,17 @@ void InitESP(JNIEnv *env) {
     g_SetESPEnabledMethod = env->GetStaticMethodID(g_MenuClass, "setESPEnabled", "(Z)V");
     g_GetScreenWidthMethod = env->GetStaticMethodID(g_MenuClass, "getScreenWidth", "()I");
     g_GetScreenHeightMethod = env->GetStaticMethodID(g_MenuClass, "getScreenHeight", "()I");
+
+    g_SetMiniMapVisibleMethod = env->GetStaticMethodID(g_MenuClass, "setMiniMapVisible", "(Z)V");
+    g_SetMiniMapIdMethod = env->GetStaticMethodID(g_MenuClass, "setMiniMapId", "(I)V");
+    g_UpdateMiniMapBatchMethod = env->GetStaticMethodID(g_MenuClass, "updateMiniMapBatch", "(Ljava/lang/String;)V");
+    g_SetMapShowPlayersMethod = env->GetStaticMethodID(g_MenuClass, "setMapShowPlayers", "(Z)V");
+    g_SetMapShowDeadBodiesMethod = env->GetStaticMethodID(g_MenuClass, "setMapShowDeadBodies", "(Z)V");
+    g_SetMapTouchTeleportMethod = env->GetStaticMethodID(g_MenuClass, "setMapTouchTeleport", "(Z)V");
+
     g_ESPReady = (g_BatchDrawMethod != NULL);
     env->DeleteLocalRef(cls);
-    LOGI("ESP Init: %s", g_ESPReady ? "SUCCESS" : "FAILED");
+    LOGI("ESP & MiniMap Init: %s", g_ESPReady ? "SUCCESS" : "FAILED");
 }
 
 void UpdateScreenSize() {
@@ -624,6 +699,78 @@ void SendBatchESP(JNIEnv* env) {
     jstring jdata = env->NewStringUTF(g_ESPBatchBuffer);
     if (jdata) {
         env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, jdata);
+        env->DeleteLocalRef(jdata);
+    }
+}
+
+void SendMiniMapBatch(JNIEnv* env) {
+    if (!env || !g_MenuClass || !g_SetMiniMapVisibleMethod) return;
+
+    // SADECE ve SADECE oyunun içindeyken (Lobi değil, ana menü değil) haritayı göster
+    bool isPlayingGame = isInGame && !isInLobby && (localPlayerInstance != NULL);
+
+    if (MiniMapHideInVote && isInVotingScreen) {
+        isPlayingGame = false;
+    }
+
+    bool shouldShowMap = MiniMapEnabled && isPlayingGame;
+
+    // Paneli aç/kapat emrini doğrudan gönder
+    env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapVisibleMethod, (jboolean)shouldShowMap);
+
+    if (!shouldShowMap) return;
+
+    // Harita ID'sini Java'ya ilet
+    if (g_SetMiniMapIdMethod) {
+        env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapIdMethod, (jint)g_CurrentMapId);
+    }
+
+    if (!g_UpdateMiniMapBatchMethod) return;
+
+    // 60 FPS'te 3 karede bir gönder (Hafif ve pürüzsüz)
+    static int mapThrottle = 0;
+    if (++mapThrottle < 3) return;
+    mapThrottle = 0;
+
+    int offset = 0;
+    g_MiniMapBatchBuffer[0] = '\0';
+
+    for (int i = 0; i < g_RenderPlayerCount; i++) {
+        PlayerData* p = &g_RenderPlayers[i];
+        if (!p->isValid) continue;
+
+        int pColor = GetPlayerExactColor(p->instance);
+
+        char safeName[32];
+        int j = 0;
+        for (int k = 0; p->name[k] && j < 30; k++) {
+            if (p->name[k] == ',' || p->name[k] == ';') safeName[j++] = ' ';
+            else safeName[j++] = p->name[k];
+        }
+        safeName[j] = '\0';
+
+        bool isDeadPlayer = p->isGhost || p->isDowned;
+        Vector2 targetCoord = p->position;
+
+        // Ölü oyuncu için KilledLocation geçerliyse onu kullan, değilse son bilinen pozisyonu
+        if (isDeadPlayer) {
+            if (p->killedLocation.x != 0.0f || p->killedLocation.y != 0.0f) {
+                targetCoord = p->killedLocation;
+            }
+        }
+
+        offset += snprintf(g_MiniMapBatchBuffer + offset, sizeof(g_MiniMapBatchBuffer) - offset,
+                           "%.2f,%.2f,%d,%d,%d,%s;",
+                           targetCoord.x, targetCoord.y,
+                           isDeadPlayer ? 1 : 0,
+                           p->isLocal ? 1 : 0,
+                           pColor, safeName);
+        if (offset >= sizeof(g_MiniMapBatchBuffer) - 100) break;
+    }
+
+    jstring jdata = env->NewStringUTF(g_MiniMapBatchBuffer);
+    if (jdata) {
+        env->CallStaticVoidMethod(g_MenuClass, g_UpdateMiniMapBatchMethod, jdata);
         env->DeleteLocalRef(jdata);
     }
 }
@@ -885,15 +1032,23 @@ void ApplyNoClip(void* instance, bool enable) {
 
 void CollectPlayerDataFromInstance(void* instance, PlayerData* p, Vector2 camPos) {
     if (!instance || !p) return;
+    p->instance = instance;
     bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
     p->position = GetPlayerPosition(instance, isLocal);
+
+    p->killedLocation = {0.0f, 0.0f};
     p->isGhost = *(bool*)((uintptr_t)instance + OFFSET_PE_ISGHOST);
+    p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
+
+    if (p->isGhost || p->isDowned) {
+        p->killedLocation = *(Vector2*)((uintptr_t)instance + OFFSET_PE_KILLEDLOCATION);
+    }
+
     p->isLocal = isLocal;
     p->role = GetRoleType(instance);
     p->teamId = *(int*)((uintptr_t)instance + OFFSET_PE_TEAMID);
     p->entityNumber = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
     GetPlayerNickname(instance, p->name, sizeof(p->name));
-    p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
     p->inVent = *(bool*)((uintptr_t)instance + OFFSET_PE_INVENT);
     p->isInvisible = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINVISIBLE);
     p->isInPelican = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINPELICAN);
@@ -957,9 +1112,6 @@ void RenderDebugPanelBatch() {
 
     snprintf(buf, sizeof(buf), "Drone:%c | Ready:%c | Init:%c | Delay:%d/%d | Zoom:%.1f", DroneView ? 'Y' : 'N', g_DroneViewReady ? 'Y' : 'N', g_DroneViewInitialized ? 'Y' : 'N', g_DroneViewDelay, DRONE_VIEW_DELAY_FRAMES, DroneZoom);
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
-
-    snprintf(buf, sizeof(buf), "TP Target: X=%.0f Y=%.0f | Saved: X=%.1f Y=%.1f", TeleportX, TeleportY, SavedPosX, SavedPosY);
-    BatchAddText(centerX, startY, buf, COLOR_YELLOW); startY += lineHeight;
 
     snprintf(buf, sizeof(buf), "GM:%c | State:%s(%d) | InGame:%c | Lobby:%c | Vote:%c | Players:%d | Dead:%d", g_GameManager ? 'Y' : 'N', GetGameStateName(g_CurrentGameState), g_CurrentGameState, isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', isInVotingScreen ? 'Y' : 'N', g_RenderPlayerCount, g_DeadPlayersCount);
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
@@ -1094,11 +1246,18 @@ void ClearAllESP() {
     g_DeadPlayersCount = 0; g_LocalTasksRemaining = 0; g_LocalKilledBy[0] = '\0';
     g_LocalIsInfected = false; g_LocalHasBomb = false; g_RoofRemovedThisRound = false;
     g_CameraPosition = {0, 0, 0}; g_CinemachineCamera = nullptr; g_CameraPositionValid = false;
+    s_LastMiniMapState = false;
     ResetDroneViewDelay();
+
     JNIEnv* env = GetJNIEnv();
-    if (env && g_BatchDrawMethod && g_MenuClass) {
-        jstring empty = env->NewStringUTF("");
-        if (empty) { env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, empty); env->DeleteLocalRef(empty); }
+    if (env && g_MenuClass) {
+        if (g_BatchDrawMethod) {
+            jstring empty = env->NewStringUTF("");
+            if (empty) { env->CallStaticVoidMethod(g_MenuClass, g_BatchDrawMethod, empty); env->DeleteLocalRef(empty); }
+        }
+        if (g_SetMiniMapVisibleMethod) {
+            env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapVisibleMethod, (jboolean)false);
+        }
     }
 }
 
@@ -1122,12 +1281,15 @@ void RefreshPlayerDataAndRender() {
     static int screenUpdateCounter = 0;
     if (++screenUpdateCounter >= 60) { UpdateScreenSize(); screenUpdateCounter = 0; }
 
-    if (ESPEnabled || DebugMode) {
-        BatchClear();
-        if (DebugMode) RenderDebugPanelBatch();
-        if (ESPEnabled) RenderESPBatch();
-        JNIEnv* env = GetJNIEnv();
-        if (env) SendBatchESP(env);
+    JNIEnv* env = GetJNIEnv();
+    if (env) {
+        if (ESPEnabled || DebugMode) {
+            BatchClear();
+            if (DebugMode) RenderDebugPanelBatch();
+            if (ESPEnabled) RenderESPBatch();
+            SendBatchESP(env);
+        }
+        SendMiniMapBatch(env);
     }
 }
 
@@ -1168,14 +1330,19 @@ void Update(void *instance) {
             if (old_get_deadPlayersCount) g_DeadPlayersCount = old_get_deadPlayersCount();
             if (UnlimitedVision) *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
             if (NoClip) ApplyNoClip(instance, true);
-            if (btnSetPosition) { SavedPosX = g_LocalPlayerPos.x; SavedPosY = g_LocalPlayerPos.y; TeleportX = g_LocalPlayerPos.x; TeleportY = g_LocalPlayerPos.y; btnSetPosition = false; LOGI("Position saved: %.2f, %.2f", SavedPosX, SavedPosY); }
-            if (btnTeleport && TeleportTo) { Vector2 targetPos = {TeleportX, TeleportY}; TeleportTo(instance, targetPos, true); btnTeleport = false; LOGI("Teleported to: %.2f, %.2f", TeleportX, TeleportY); }
             if (btnCallEmergency && PlayerController_CallEmergency) { PlayerController_CallEmergency(instance); btnCallEmergency = false; LOGI("Emergency called"); }
+
+            // Oyunun kendi Unity ana döngüsünde güvenli teleport
+            if (g_PendingDirectTP.load() && TeleportTo) {
+                Vector2 targetPos = {g_TargetDirectTPX.load(), g_TargetDirectTPY.load()};
+                TeleportTo(instance, targetPos, true);
+                g_PendingDirectTP.store(false);
+            }
 
             HandleTasksAndSabotageLogic();
             HandleAutoReady();
         }
-        if ((ESPEnabled || DebugMode) && g_PlayerInstanceCount < MAX_PLAYERS) {
+        if ((ESPEnabled || DebugMode || MiniMapEnabled) && g_PlayerInstanceCount < MAX_PLAYERS) {
             g_PlayerInstances[g_PlayerInstanceCount].instance = instance;
             g_PlayerInstances[g_PlayerInstanceCount].isLocal = isLocal;
             g_PlayerInstances[g_PlayerInstanceCount].isValid = true;
@@ -1248,6 +1415,16 @@ void (*old_PlayerPropertiesManager_Initialize)(void* instance) = NULL;
 void hook_PlayerPropertiesManager_Initialize(void* instance) {
     if (instance) g_PlayerPropertiesManager = instance;
     old_PlayerPropertiesManager_Initialize(instance);
+}
+
+// MapManager.Internal_OnMapLoad - RVA: 0x3831058
+void (*old_Internal_OnMapLoad)(void* instance) = NULL;
+void hook_Internal_OnMapLoad(void* instance) {
+    if (instance) {
+        uint8_t mapVal = *(uint8_t*)((uintptr_t)instance + 0x2);
+        g_CurrentMapId = (int)mapVal;
+    }
+    old_Internal_OnMapLoad(instance);
 }
 
 // GGDRole.OnEnterVent - RVA: 0x3CD0438
@@ -1347,6 +1524,13 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Toggle_True_[\uE224]Hide in Vote Screen"),
             OBFUSCATE("Toggle_[\uE224]Hide in Lobby"),
 
+            OBFUSCATE("Category_[\uE31A]Mini Map"),
+            OBFUSCATE("Toggle_[\uE31A]Show Mini Map"),
+            OBFUSCATE("Toggle_True_[\uE6F6]Show Map Players"),
+            OBFUSCATE("Toggle_True_[\uE62A]Show Map Dead Bodies"),
+            OBFUSCATE("Toggle_True_[\uE2DE]Touch Teleport (Map)"),
+            OBFUSCATE("Toggle_True_[\uE224]Hide Map in Vote Screen"),
+
             OBFUSCATE("Category_[\uE326]Voice"),
             OBFUSCATE("Toggle_[\uE326]Hear Dead Voice"),
             OBFUSCATE("Toggle_[\uE326]Hear Far Players"),
@@ -1359,11 +1543,7 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Toggle_[\uEBA6]Auto Tasks"),
             OBFUSCATE("Button_[\uEBA6]Complete 1 Task"),
 
-            OBFUSCATE("Category_[\uE31A]Miscellaneous"),
-            OBFUSCATE("InputValue_999_[\uE316]Teleport X"),
-            OBFUSCATE("InputValue_999_[\uE316]Teleport Y"),
-            OBFUSCATE("Button_[\uE1D6]Set Current Position"),
-            OBFUSCATE("Button_[\uE2DE]Teleport Now"),
+            OBFUSCATE("Category_[\uE190]Miscellaneous"),
             OBFUSCATE("Button_[\uE0CE]Call Emergency"),
             OBFUSCATE("Toggle_[\uE186]Auto Ready (Lobby)"),
 
@@ -1406,25 +1586,41 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 13: ESPHideInVote = boolean; break;
         case 14: ESPHideInLobby = boolean; break;
 
-        case 15: HearDeadVoice = boolean; break;
-        case 16: HearFarPlayers = boolean; break;
+        case 15:
+            MiniMapEnabled = boolean;
+            if (env && g_SetMiniMapVisibleMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapVisibleMethod, (jboolean)boolean);
+            break;
+        case 16:
+            MiniMapShowPlayers = boolean;
+            if (env && g_SetMapShowPlayersMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMapShowPlayersMethod, (jboolean)boolean);
+            break;
+        case 17:
+            MiniMapShowDead = boolean;
+            if (env && g_SetMapShowDeadBodiesMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMapShowDeadBodiesMethod, (jboolean)boolean);
+            break;
+        case 18:
+            MiniMapTouchTP = boolean;
+            if (env && g_SetMapTouchTeleportMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMapTouchTeleportMethod, (jboolean)boolean);
+            break;
+        case 19:
+            MiniMapHideInVote = boolean;
+            break;
 
-        case 17: btnUnlockSabotages = true; break;
-        case 18: AutoRepairSabotage = boolean; break;
-        case 19: btnRepairSabotageNow = true; break;
-        case 20: SafeAutoTasks = boolean; if (boolean) g_LastSafeTaskTime = std::chrono::steady_clock::now(); break;
-        case 21: btnCompleteOneTask = true; break;
+        case 20: HearDeadVoice = boolean; break;
+        case 21: HearFarPlayers = boolean; break;
 
-        case 22: TeleportX = (float)value; break;
-        case 23: TeleportY = (float)value; break;
-        case 24: btnSetPosition = true; break;
-        case 25: btnTeleport = true; break;
-        case 26: btnCallEmergency = true; break;
-        case 27: AutoReady = boolean; break;
-        case 28: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
-        case 29: AntiDeath = boolean; break;
-        case 30: SpeedHack = boolean; break;
-        case 31: SpeedMultiplier = (float)value / 10.0f; break;
+        case 22: btnUnlockSabotages = true; break;
+        case 23: AutoRepairSabotage = boolean; break;
+        case 24: btnRepairSabotageNow = true; break;
+        case 25: SafeAutoTasks = boolean; if (boolean) g_LastSafeTaskTime = std::chrono::steady_clock::now(); break;
+        case 26: btnCompleteOneTask = true; break;
+
+        case 27: btnCallEmergency = true; break;
+        case 28: AutoReady = boolean; break;
+        case 29: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
+        case 30: AntiDeath = boolean; break;
+        case 31: SpeedHack = boolean; break;
+        case 32: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -1462,6 +1658,9 @@ void hack_thread() {
 
     // PlayerPropertiesManager.GetUserProperties - RVA: 0x3AC5A98
     PlayerPropertiesManager_GetUserProperties = (void* (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AC5A98")));
+
+    // MapManager.Internal_OnMapLoad - RVA: 0x3831058
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3831058")), hook_Internal_OnMapLoad, old_Internal_OnMapLoad);
 
     // PlayableEntity.Update - RVA: 0x3E4FC30
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E4FC30")), Update, old_Update);

@@ -54,6 +54,8 @@ public class Menu {
     private static boolean espEnabled = false;
     private static Menu instance;
 
+    private static MiniMapOverlay miniMapOverlay;
+
     private Typeface menuFont;
     private Typeface iconFont;
     private boolean fontsLoaded = false;
@@ -119,6 +121,8 @@ public class Menu {
         Preferences.context = context;
 
         loadFonts(context);
+
+        miniMapOverlay = new MiniMapOverlay(context);
 
         rootFrame = new FrameLayout(context);
         mRootContainer = new RelativeLayout(context);
@@ -203,6 +207,40 @@ public class Menu {
         }
     }
 
+    public static void setMiniMapVisible(boolean visible) {
+        if (miniMapOverlay != null) {
+            miniMapOverlay.setVisible(visible);
+        }
+    }
+
+    public static void setMiniMapId(int mapId) {
+        if (miniMapOverlay != null) {
+            miniMapOverlay.setMapId(mapId);
+        }
+    }
+
+    public static void updateMiniMapBatch(String data) {
+        if (miniMapOverlay != null && miniMapOverlay.isShowing()) {
+            miniMapOverlay.parseAndUpdateData(data);
+        }
+    }
+
+    public static void directTeleport(float x, float y) {
+        MiniMapView.nativeDirectTeleport(x, y);
+    }
+
+    public static void setMapShowPlayers(boolean enabled) {
+        MiniMapView.showPlayers = enabled;
+    }
+
+    public static void setMapShowDeadBodies(boolean enabled) {
+        MiniMapView.showDeadBodies = enabled;
+    }
+
+    public static void setMapTouchTeleport(boolean enabled) {
+        MiniMapView.touchTeleportEnabled = enabled;
+    }
+
     public void initESP() {
         if (espView != null) return;
         try {
@@ -234,68 +272,68 @@ public class Menu {
                     case 'L':
                         if (parts.length >= 5) {
                             espView.addLine(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                Float.parseFloat(parts[2]),
-                                Float.parseFloat(parts[3]),
-                                parseColor(parts[4])
+                                    Float.parseFloat(parts[0]),
+                                    Float.parseFloat(parts[1]),
+                                    Float.parseFloat(parts[2]),
+                                    Float.parseFloat(parts[3]),
+                                    parseColor(parts[4])
                             );
                         }
                         break;
                     case 'B':
                         if (parts.length >= 5) {
                             espView.addBox(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                Float.parseFloat(parts[2]),
-                                Float.parseFloat(parts[3]),
-                                parseColor(parts[4])
+                                    Float.parseFloat(parts[0]),
+                                    Float.parseFloat(parts[1]),
+                                    Float.parseFloat(parts[2]),
+                                    Float.parseFloat(parts[3]),
+                                    parseColor(parts[4])
                             );
                         }
                         break;
                     case 'T':
                         if (parts.length >= 4) {
                             espView.addText(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                parts[2],
-                                parseColor(parts[3])
+                                    Float.parseFloat(parts[0]),
+                                    Float.parseFloat(parts[1]),
+                                    parts[2],
+                                    parseColor(parts[3])
                             );
                         }
                         break;
                     case 'I':
                         if (parts.length >= 4) {
                             espView.addIcon(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                parts[2],
-                                parseColor(parts[3])
+                                    Float.parseFloat(parts[0]),
+                                    Float.parseFloat(parts[1]),
+                                    parts[2],
+                                    parseColor(parts[3])
                             );
                         }
                         break;
                     case 'C':
                         if (parts.length >= 4) {
                             espView.addCircle(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                Float.parseFloat(parts[2]),
-                                parseColor(parts[3])
+                                    Float.parseFloat(parts[0]),
+                                    Float.parseFloat(parts[1]),
+                                    Float.parseFloat(parts[2]),
+                                    parseColor(parts[3])
                             );
                         }
                         break;
                     case 'F':
                         if (parts.length >= 5) {
                             espView.addFilledBox(
-                                Float.parseFloat(parts[0]),
-                                Float.parseFloat(parts[1]),
-                                Float.parseFloat(parts[2]),
-                                Float.parseFloat(parts[3]),
-                                parseColor(parts[4])
+                                    Float.parseFloat(parts[0]),
+                                    Float.parseFloat(parts[1]),
+                                    Float.parseFloat(parts[2]),
+                                    Float.parseFloat(parts[3]),
+                                    parseColor(parts[4])
                             );
                         }
                         break;
                 }
-            } catch (Exception e) {}
+            } catch (Exception ignored) {}
         }
         espView.refresh();
     }
@@ -326,22 +364,9 @@ public class Menu {
         if (espView != null && espWindowManager != null) {
             try {
                 espWindowManager.removeView(espView);
-            } catch (Exception e) {}
+            } catch (Exception ignored) {}
             espView = null;
         }
-    }
-
-    private TextView createIconView(String iconCode, int color) {
-        TextView iconView = new TextView(getContext);
-        iconView.setText(iconCode);
-        iconView.setTextColor(color);
-        iconView.setTextSize(16f);
-        iconView.setTypeface(iconFont);
-        iconView.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(24), dp(24));
-        params.setMargins(0, 0, dp(10), 0);
-        iconView.setLayoutParams(params);
-        return iconView;
     }
 
     private void setupIcon(Context context) {
@@ -380,10 +405,10 @@ public class Menu {
             wParams.gravity = Gravity.CENTER;
             wView.setLayoutParams(wParams);
             wView.loadData(
-                "<html><body style='margin:0;padding:0;background:transparent;'>" +
-                "<img src='" + webData + "' width='100%' height='100%' style='object-fit:contain;'/>" +
-                "</body></html>",
-                "text/html", "utf-8"
+                    "<html><body style='margin:0;padding:0;background:transparent;'>" +
+                            "<img src='" + webData + "' width='100%' height='100%' style='object-fit:contain;'/>" +
+                            "</body></html>",
+                    "text/html", "utf-8"
             );
             wView.setBackgroundColor(Color.TRANSPARENT);
             wView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
@@ -443,22 +468,22 @@ public class Menu {
         settingsBtn.setPadding(dp(12), dp(4), dp(4), dp(4));
 
         settingsBtn.setOnClickListener(new View.OnClickListener() {
-				boolean isSettings = false;
-				@Override
-				public void onClick(View v) {
-					isSettings = !isSettings;
-					scrollView.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
-							@Override
-							public void run() {
-								scrollView.removeAllViews();
-								scrollView.addView(isSettings ? mSettings : mods);
-								scrollView.scrollTo(0, 0);
-								scrollView.animate().alpha(1f).setDuration(150).start();
-							}
-						}).start();
-                    settingsBtn.setText(isSettings ? "\uE014" : "\uE270");
-				}
-			});
+            boolean isSettings = false;
+            @Override
+            public void onClick(View v) {
+                isSettings = !isSettings;
+                scrollView.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        scrollView.removeAllViews();
+                        scrollView.addView(isSettings ? mSettings : mods);
+                        scrollView.scrollTo(0, 0);
+                        scrollView.animate().alpha(1f).setDuration(150).start();
+                    }
+                }).start();
+                settingsBtn.setText(isSettings ? "\uE014" : "\uE270");
+            }
+        });
 
         header.addView(title);
         header.addView(settingsBtn);
@@ -525,34 +550,34 @@ public class Menu {
         hideBtn.addView(hideText);
 
         hideBtn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					mExpanded.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
-						.setDuration(200).withEndAction(new Runnable() {
-							@Override
-							public void run() {
-								mExpanded.setVisibility(View.GONE);
-								mExpanded.setAlpha(1f);
-								mExpanded.setScaleX(1f);
-								mExpanded.setScaleY(1f);
-								mCollapsed.setVisibility(View.VISIBLE);
-								mCollapsed.setAlpha(0f);
-							}
-						}).start();
-					Toast.makeText(getContext, "Icon hidden. Remember position!", Toast.LENGTH_LONG).show();
-				}
-			});
+            @Override
+            public void onClick(View v) {
+                mExpanded.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
+                        .setDuration(200).withEndAction(new Runnable() {
+                            @Override
+                            public void run() {
+                                mExpanded.setVisibility(View.GONE);
+                                mExpanded.setAlpha(1f);
+                                mExpanded.setScaleX(1f);
+                                mExpanded.setScaleY(1f);
+                                mCollapsed.setVisibility(View.VISIBLE);
+                                mCollapsed.setAlpha(0f);
+                            }
+                        }).start();
+                Toast.makeText(getContext, "Icon hidden. Remember position!", Toast.LENGTH_LONG).show();
+            }
+        });
 
         hideBtn.setOnLongClickListener(new View.OnLongClickListener() {
-				@Override
-				public boolean onLongClick(View v) {
-					Toast.makeText(getContext, "Menu killed", Toast.LENGTH_SHORT).show();
-					if (rootFrame != null && mWindowManager != null) {
-						try { mWindowManager.removeView(rootFrame); } catch (Exception e) {}
-					}
-					return true;
-				}
-			});
+            @Override
+            public boolean onLongClick(View v) {
+                Toast.makeText(getContext, "Menu killed", Toast.LENGTH_SHORT).show();
+                if (rootFrame != null && mWindowManager != null) {
+                    try { mWindowManager.removeView(rootFrame); } catch (Exception ignored) {}
+                }
+                return true;
+            }
+        });
 
         LinearLayout closeBtn = new LinearLayout(context);
         closeBtn.setLayoutParams(btnParams);
@@ -584,23 +609,23 @@ public class Menu {
         closeBtn.addView(closeText);
 
         closeBtn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					mExpanded.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
-						.setDuration(200).setInterpolator(new DecelerateInterpolator())
-						.withEndAction(new Runnable() {
-							@Override
-							public void run() {
-								mExpanded.setVisibility(View.GONE);
-								mExpanded.setAlpha(1f);
-								mExpanded.setScaleX(1f);
-								mExpanded.setScaleY(1f);
-								mCollapsed.setVisibility(View.VISIBLE);
-								mCollapsed.setAlpha(ICON_ALPHA);
-							}
-						}).start();
-				}
-			});
+            @Override
+            public void onClick(View v) {
+                mExpanded.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
+                        .setDuration(200).setInterpolator(new DecelerateInterpolator())
+                        .withEndAction(new Runnable() {
+                            @Override
+                            public void run() {
+                                mExpanded.setVisibility(View.GONE);
+                                mExpanded.setAlpha(1f);
+                                mExpanded.setScaleX(1f);
+                                mExpanded.setScaleY(1f);
+                                mCollapsed.setVisibility(View.VISIBLE);
+                                mCollapsed.setAlpha(ICON_ALPHA);
+                            }
+                        }).start();
+            }
+        });
 
         footer.addView(hideBtn);
         footer.addView(closeBtn);
@@ -729,13 +754,13 @@ public class Menu {
             anim.setDuration(200);
             anim.setInterpolator(new OvershootInterpolator(1.5f));
             anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-					@Override
-					public void onAnimationUpdate(ValueAnimator animation) {
-						FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) thumb.getLayoutParams();
-						p.leftMargin = (int) animation.getAnimatedValue();
-						thumb.setLayoutParams(p);
-					}
-				});
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) thumb.getLayoutParams();
+                    p.leftMargin = (int) animation.getAnimatedValue();
+                    thumb.setLayoutParams(p);
+                }
+            });
             anim.start();
         } else {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) thumb.getLayoutParams();
@@ -827,32 +852,32 @@ public class Menu {
         seekBar.setThumbOffset(0);
 
         seekBar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
-				@Override
-				public void onProgressChanged(android.widget.SeekBar sb, int prog, boolean user) {
-					int val = prog + min;
-					value.setText(String.valueOf(val));
-					Preferences.changeFeatureInt(featName, featNum, val);
-					float pct = (max > min) ? (float) prog / (max - min) : 0;
-					int trackWidth = (int) ((sliderFrame.getWidth() - dp(20)) * pct) + dp(6);
-					FrameLayout.LayoutParams pp = (FrameLayout.LayoutParams) progressTrack.getLayoutParams();
-					pp.width = Math.max(dp(6), trackWidth);
-					progressTrack.setLayoutParams(pp);
-				}
-				@Override public void onStartTrackingTouch(android.widget.SeekBar sb) {}
-				@Override public void onStopTrackingTouch(android.widget.SeekBar sb) {}
-			});
+            @Override
+            public void onProgressChanged(android.widget.SeekBar sb, int prog, boolean user) {
+                int val = prog + min;
+                value.setText(String.valueOf(val));
+                Preferences.changeFeatureInt(featName, featNum, val);
+                float pct = (max > min) ? (float) prog / (max - min) : 0;
+                int trackWidth = (int) ((sliderFrame.getWidth() - dp(20)) * pct) + dp(6);
+                FrameLayout.LayoutParams pp = (FrameLayout.LayoutParams) progressTrack.getLayoutParams();
+                pp.width = Math.max(dp(6), trackWidth);
+                progressTrack.setLayoutParams(pp);
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar sb) {}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar sb) {}
+        });
 
         sliderFrame.post(new Runnable() {
-				@Override
-				public void run() {
-					int prog = seekBar.getProgress();
-					float pct = (max > min) ? (float) prog / (max - min) : 0;
-					int trackWidth = (int) ((sliderFrame.getWidth() - dp(20)) * pct) + dp(6);
-					FrameLayout.LayoutParams pp = (FrameLayout.LayoutParams) progressTrack.getLayoutParams();
-					pp.width = Math.max(dp(6), trackWidth);
-					progressTrack.setLayoutParams(pp);
-				}
-			});
+            @Override
+            public void run() {
+                int prog = seekBar.getProgress();
+                float pct = (max > min) ? (float) prog / (max - min) : 0;
+                int trackWidth = (int) ((sliderFrame.getWidth() - dp(20)) * pct) + dp(6);
+                FrameLayout.LayoutParams pp = (FrameLayout.LayoutParams) progressTrack.getLayoutParams();
+                pp.width = Math.max(dp(6), trackWidth);
+                progressTrack.setLayoutParams(pp);
+            }
+        });
 
         sliderFrame.addView(bgTrack);
         sliderFrame.addView(progressTrack);
@@ -899,540 +924,25 @@ public class Menu {
         btn.addView(text);
 
         btn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(final View v) {
-					v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
-						.withEndAction(new Runnable() {
-							@Override public void run() {
-								v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
-							}
-						}).start();
-					if (featNum == -6) {
-						scrollView.removeAllViews();
-						scrollView.addView(mods);
-					} else if (featNum == -100) {
-						stopChecking = true;
-					}
-					Preferences.changeFeatureInt(featName, featNum, 0);
-				}
-			});
-
-        parent.addView(btn);
-    }
-
-    private void ButtonOnOff(LinearLayout parent, final int featNum, String featName, boolean defaultOn, final String icon) {
-        final String name = featName.replace("OnOff_", "");
-        final boolean[] isOn = {Preferences.loadPrefBool(featName, featNum, defaultOn)};
-
-        final LinearLayout btn = new LinearLayout(getContext);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(48));
-        params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
-        btn.setLayoutParams(params);
-        btn.setGravity(Gravity.CENTER);
-        btn.setOrientation(LinearLayout.HORIZONTAL);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            btn.setElevation(dp(2));
-        }
-
-        final TextView iconView;
-        if (icon != null) {
-            iconView = new TextView(getContext);
-            iconView.setText(icon);
-            iconView.setTextSize(16f);
-            iconView.setTypeface(iconFont);
-            iconView.setPadding(0, 0, dp(8), 0);
-            btn.addView(iconView);
-        } else {
-            iconView = null;
-        }
-
-        final TextView text = new TextView(getContext);
-        text.setTextSize(14f);
-        text.setTypeface(menuFont, Typeface.BOLD);
-        btn.addView(text);
-
-        applyOnOffStyle(btn, iconView, text, name, isOn[0]);
-
-        btn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(final View v) {
-					isOn[0] = !isOn[0];
-					applyOnOffStyle(btn, iconView, text, name, isOn[0]);
-					Preferences.changeFeatureBool(name, featNum, isOn[0]);
-					v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
-						.withEndAction(new Runnable() {
-							@Override public void run() {
-								v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
-							}
-						}).start();
-				}
-			});
-
-        parent.addView(btn);
-    }
-
-    private void applyOnOffStyle(LinearLayout btn, TextView iconView, TextView text, String name, boolean on) {
-        text.setText(name + (on ? "  :  ON" : "  :  OFF"));
-        text.setTextColor(TEXT_PRIMARY);
-        if (iconView != null) iconView.setTextColor(on ? STATE_ON : STATE_OFF);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(RADIUS_L));
-        bg.setColor(on ? STATE_ON : STATE_OFF);
-        btn.setBackground(bg);
-    }
-
-    private void ButtonLink(LinearLayout parent, final String name, final String url, String icon, int accentColor) {
-        LinearLayout btn = new LinearLayout(getContext);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
-        params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
-        btn.setLayoutParams(params);
-        btn.setGravity(Gravity.CENTER);
-        btn.setOrientation(LinearLayout.HORIZONTAL);
-
-        int linkColor = (icon != null) ? accentColor : ACCENT_BLUE;
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(RADIUS_L));
-        bg.setStroke(dp(1), linkColor);
-        btn.setBackground(bg);
-
-        if (icon != null) {
-            TextView iconView = new TextView(getContext);
-            iconView.setText(icon);
-            iconView.setTextColor(linkColor);
-            iconView.setTextSize(14f);
-            iconView.setTypeface(iconFont);
-            iconView.setPadding(0, 0, dp(8), 0);
-            btn.addView(iconView);
-        }
-
-        TextView text = new TextView(getContext);
-        text.setText(Html.fromHtml(name));
-        text.setTextColor(linkColor);
-        text.setTextSize(14f);
-        text.setTypeface(menuFont);
-        btn.addView(text);
-
-        btn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					Intent i = new Intent(Intent.ACTION_VIEW);
-					i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-					i.setData(Uri.parse(url));
-					getContext.startActivity(i);
-				}
-			});
-
-        parent.addView(btn);
-    }
-
-    private void Spinner(LinearLayout parent, final int featNum, final String featName, final String list, String icon, int iconColor) {
-        final List<String> items = new LinkedList<>(Arrays.asList(list.split(",")));
-        int sel = Preferences.loadPrefInt(featName, featNum);
-        if (sel >= items.size()) sel = 0;
-
-        LinearLayout card = makeCard(true);
-
-        LinearLayout header = new LinearLayout(getContext);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-
-        if (icon != null) {
-            TextView iconView = new TextView(getContext);
-            iconView.setText(icon);
-            iconView.setTextColor(iconColor);
-            iconView.setTextSize(16f);
-            iconView.setTypeface(iconFont);
-            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
-            iconParams.setMargins(0, 0, dp(8), 0);
-            iconView.setLayoutParams(iconParams);
-            iconView.setGravity(Gravity.CENTER);
-            header.addView(iconView);
-        }
-
-        TextView label = new TextView(getContext);
-        label.setText(featName);
-        label.setTextColor(TEXT_PRIMARY);
-        label.setTextSize(14f);
-        label.setTypeface(menuFont);
-        header.addView(label);
-
-        final TextView dropdown = new TextView(getContext);
-        LinearLayout.LayoutParams ddParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
-        ddParams.topMargin = dp(10);
-        dropdown.setLayoutParams(ddParams);
-        dropdown.setText(items.get(sel));
-        dropdown.setTextColor(TEXT_PRIMARY);
-        dropdown.setTextSize(14f);
-        dropdown.setTypeface(menuFont);
-        dropdown.setGravity(Gravity.CENTER_VERTICAL);
-        dropdown.setPadding(dp(14), 0, dp(14), 0);
-
-        GradientDrawable ddBg = new GradientDrawable();
-        ddBg.setCornerRadius(dp(RADIUS_M));
-        ddBg.setColor(BG_INPUT);
-        dropdown.setBackground(ddBg);
-
-        final int[] selected = {sel};
-
-        dropdown.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					showSpinnerDialog(featName, featNum, items, selected, dropdown);
-				}
-			});
-
-        card.addView(header);
-        card.addView(dropdown);
-        parent.addView(card);
-    }
-
-    private void InputNum(LinearLayout parent, final int featNum, final String featName, final int maxVal, final String icon, final int iconColor) {
-        int num = Preferences.loadPrefInt(featName, featNum);
-        final LinearLayout btn = createInputButton(featName, String.valueOf(num), icon, iconColor);
-        final boolean hasIcon = (icon != null);
-
-        btn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					showNumberDialog(featName, featNum, maxVal, false, new OnInputResult() {
-							@Override
-							public void onResult(String val) {
-								updateInputButtonText(btn, featName, val, hasIcon);
-							}
-						});
-				}
-			});
-
-        parent.addView(btn);
-    }
-
-    private void InputLNum(LinearLayout parent, final int featNum, final String featName, final long maxVal, final String icon, final int iconColor) {
-        long num = Preferences.loadPrefLong(featName, featNum);
-        final LinearLayout btn = createInputButton(featName, String.valueOf(num), icon, iconColor);
-        final boolean hasIcon = (icon != null);
-
-        btn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					showNumberDialog(featName, featNum, maxVal, true, new OnInputResult() {
-							@Override
-							public void onResult(String val) {
-								updateInputButtonText(btn, featName, val, hasIcon);
-							}
-						});
-				}
-			});
-
-        parent.addView(btn);
-    }
-
-    private void InputText(LinearLayout parent, final int featNum, final String featName, final String icon, final int iconColor) {
-        String txt = Preferences.loadPrefString(featName, featNum);
-        if (txt == null) txt = "";
-        final LinearLayout btn = createInputButton(featName, txt, icon, iconColor);
-        final boolean hasIcon = (icon != null);
-
-        btn.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					showTextDialog(featName, featNum, new OnInputResult() {
-							@Override
-							public void onResult(String val) {
-								updateInputButtonText(btn, featName, val, hasIcon);
-							}
-						});
-				}
-			});
-
-        parent.addView(btn);
-    }
-
-    private LinearLayout createInputButton(String name, String val, String icon, int iconColor) {
-        LinearLayout btn = new LinearLayout(getContext);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(48));
-        params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
-        btn.setLayoutParams(params);
-        btn.setGravity(Gravity.CENTER_VERTICAL);
-        btn.setOrientation(LinearLayout.HORIZONTAL);
-        btn.setPadding(dp(14), 0, dp(14), 0);
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(RADIUS_L));
-        bg.setColor(BG_CARD);
-        bg.setStroke(dp(1), BORDER_SOFT);
-        btn.setBackground(bg);
-
-        if (icon != null) {
-            TextView iconView = new TextView(getContext);
-            iconView.setText(icon);
-            iconView.setTextColor(iconColor);
-            iconView.setTextSize(16f);
-            iconView.setTypeface(iconFont);
-            iconView.setPadding(0, 0, dp(10), 0);
-            btn.addView(iconView);
-        }
-
-        TextView textView = new TextView(getContext);
-        textView.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
-        if (val == null || val.isEmpty()) {
-            textView.setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>-</b></font>"));
-        } else {
-            textView.setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
-        }
-        textView.setTextColor(TEXT_PRIMARY);
-        textView.setTextSize(14f);
-        textView.setTypeface(menuFont);
-        btn.addView(textView);
-
-        return btn;
-    }
-
-    private void updateInputButtonText(LinearLayout btn, String name, String val, boolean hasIcon) {
-        int textIndex = hasIcon ? 1 : 0;
-        if (btn.getChildCount() > textIndex) {
-            View child = btn.getChildAt(textIndex);
-            if (child instanceof TextView) {
-                if (val == null || val.isEmpty()) {
-                    ((TextView) child).setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>-</b></font>"));
-                } else {
-                    ((TextView) child).setText(Html.fromHtml(name + ": <font color='#D4A5C9'><b>" + val + "</b></font>"));
+            @Override
+            public void onClick(final View v) {
+                v.animate().scaleX(0.95f).scaleY(0.95f).setDuration(80)
+                        .withEndAction(new Runnable() {
+                            @Override public void run() {
+                                v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+                            }
+                        }).start();
+                if (featNum == -6) {
+                    scrollView.removeAllViews();
+                    scrollView.addView(mods);
+                } else if (featNum == -100) {
+                    stopChecking = true;
                 }
+                Preferences.changeFeatureInt(featName, featNum, 0);
             }
-        }
-    }
+        });
 
-    private void CheckBox(LinearLayout parent, final int featNum, final String featName, boolean defaultOn, String icon, final int iconColor) {
-        LinearLayout card = makeCard(false);
-
-        if (icon != null) {
-            TextView iconView = new TextView(getContext);
-            iconView.setText(icon);
-            iconView.setTextColor(iconColor);
-            iconView.setTextSize(16f);
-            iconView.setTypeface(iconFont);
-            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
-            iconParams.setMargins(0, 0, dp(8), 0);
-            iconView.setLayoutParams(iconParams);
-            iconView.setGravity(Gravity.CENTER);
-            card.addView(iconView);
-        }
-
-        final View checkBox = new View(getContext);
-        LinearLayout.LayoutParams cbParams = new LinearLayout.LayoutParams(dp(22), dp(22));
-        cbParams.setMargins(0, 0, dp(12), 0);
-        checkBox.setLayoutParams(cbParams);
-
-        TextView label = new TextView(getContext);
-        label.setText(featName);
-        label.setTextColor(TEXT_PRIMARY);
-        label.setTextSize(14f);
-        label.setTypeface(menuFont);
-        label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
-
-        final boolean[] checked = {Preferences.loadPrefBool(featName, featNum, defaultOn)};
-        final int checkColor = (icon != null) ? iconColor : ACCENT_PURPLE;
-        applyCheckStyle(checkBox, checked[0], checkColor);
-
-        card.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					checked[0] = !checked[0];
-					applyCheckStyle(checkBox, checked[0], checkColor);
-					Preferences.changeFeatureBool(featName, featNum, checked[0]);
-					checkBox.animate().scaleX(0.8f).scaleY(0.8f).setDuration(100)
-						.withEndAction(new Runnable() {
-							@Override public void run() {
-								checkBox.animate().scaleX(1f).scaleY(1f).setDuration(100).start();
-							}
-						}).start();
-				}
-			});
-
-        card.addView(checkBox);
-        card.addView(label);
-        parent.addView(card);
-    }
-
-    private void applyCheckStyle(View box, boolean checked, int accentColor) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(6));
-        if (checked) {
-            bg.setColor(accentColor);
-        } else {
-            bg.setColor(Color.TRANSPARENT);
-            bg.setStroke(dp(2), TEXT_MUTED);
-        }
-        box.setBackground(bg);
-    }
-
-    private void RadioButton(LinearLayout parent, final int featNum, String featName, final String list, String icon, final int iconColor) {
-        final List<String> items = new LinkedList<>(Arrays.asList(list.split(",")));
-
-        LinearLayout card = makeCard(true);
-
-        LinearLayout header = new LinearLayout(getContext);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-
-        if (icon != null) {
-            TextView iconView = new TextView(getContext);
-            iconView.setText(icon);
-            iconView.setTextColor(iconColor);
-            iconView.setTextSize(16f);
-            iconView.setTypeface(iconFont);
-            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
-            iconParams.setMargins(0, 0, dp(8), 0);
-            iconView.setLayoutParams(iconParams);
-            iconView.setGravity(Gravity.CENTER);
-            header.addView(iconView);
-        }
-
-        final TextView label = new TextView(getContext);
-        label.setText(featName + ":");
-        label.setTextColor(TEXT_PRIMARY);
-        label.setTextSize(14f);
-        label.setTypeface(menuFont);
-        header.addView(label);
-
-        LinearLayout radioGroup = new LinearLayout(getContext);
-        radioGroup.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams rgParams = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
-        rgParams.topMargin = dp(8);
-        radioGroup.setLayoutParams(rgParams);
-
-        final int[] selected = {Preferences.loadPrefInt(featName, featNum)};
-        final View[] radios = new View[items.size()];
-        final int radioColor = (icon != null) ? iconColor : ACCENT_PINK;
-
-        for (int i = 0; i < items.size(); i++) {
-            final int idx = i;
-            final String item = items.get(i);
-
-            LinearLayout row = new LinearLayout(getContext);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(8), 0, dp(8));
-
-            View radio = new View(getContext);
-            LinearLayout.LayoutParams rParams = new LinearLayout.LayoutParams(dp(18), dp(18));
-            rParams.setMargins(0, 0, dp(12), 0);
-            radio.setLayoutParams(rParams);
-            radios[i] = radio;
-            applyRadioStyle(radio, selected[0] == i + 1, radioColor);
-
-            TextView itemLabel = new TextView(getContext);
-            itemLabel.setText(item);
-            itemLabel.setTextColor(TEXT_SECONDARY);
-            itemLabel.setTextSize(13f);
-            itemLabel.setTypeface(menuFont);
-
-            final String fName = featName;
-            row.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View v) {
-						selected[0] = idx + 1;
-						for (int j = 0; j < radios.length; j++) {
-							applyRadioStyle(radios[j], j == idx, radioColor);
-						}
-						label.setText(Html.fromHtml(fName + ": <font color='#D4A5C9'>" + item + "</font>"));
-						Preferences.changeFeatureInt(fName, featNum, selected[0]);
-					}
-				});
-
-            row.addView(radio);
-            row.addView(itemLabel);
-            radioGroup.addView(row);
-        }
-
-        if (selected[0] > 0 && selected[0] <= items.size()) {
-            label.setText(Html.fromHtml(featName + ": <font color='#D4A5C9'>" + items.get(selected[0] - 1) + "</font>"));
-        }
-
-        card.addView(header);
-        card.addView(radioGroup);
-        parent.addView(card);
-    }
-
-    private void applyRadioStyle(View radio, boolean selected, int accentColor) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        if (selected) {
-            bg.setColor(accentColor);
-            bg.setStroke(dp(2), accentColor);
-        } else {
-            bg.setColor(Color.TRANSPARENT);
-            bg.setStroke(dp(2), TEXT_MUTED);
-        }
-        radio.setBackground(bg);
-    }
-
-    private void Collapse(LinearLayout parent, final String text, final boolean expanded, String icon, int bgColor) {
-        final LinearLayout header = new LinearLayout(getContext);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams hParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(46));
-        hParams.setMargins(0, dp(ITEM_SPACING), 0, 0);
-        header.setLayoutParams(hParams);
-        header.setPadding(dp(14), 0, dp(14), 0);
-
-        int headerColor = (icon != null) ? bgColor : ACCENT_PEACH;
-
-        GradientDrawable hBg = new GradientDrawable();
-        hBg.setCornerRadius(dp(RADIUS_L));
-        hBg.setColor(headerColor);
-        header.setBackground(hBg);
-
-        final TextView arrow = new TextView(getContext);
-        arrow.setText(expanded ? "\uEA4D" : "\uEA6D");
-        arrow.setTextColor(BG_PRIMARY);
-        arrow.setTextSize(18f);
-        arrow.setTypeface(iconFont);
-        header.addView(arrow);
-
-        TextView title = new TextView(getContext);
-        title.setText(text);
-        title.setTextColor(BG_PRIMARY);
-        title.setTextSize(14f);
-        title.setTypeface(menuFont, Typeface.BOLD);
-        title.setPadding(dp(8), 0, 0, 0);
-        header.addView(title);
-
-        final LinearLayout content = new LinearLayout(getContext);
-        content.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams cParams = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
-        cParams.setMargins(0, dp(2), 0, dp(ITEM_SPACING));
-        content.setLayoutParams(cParams);
-        content.setPadding(dp(12), dp(10), dp(12), dp(10));
-        content.setVisibility(expanded ? View.VISIBLE : View.GONE);
-
-        GradientDrawable cBg = new GradientDrawable();
-        cBg.setCornerRadii(new float[]{0, 0, 0, 0, dp(RADIUS_L), dp(RADIUS_L), dp(RADIUS_L), dp(RADIUS_L)});
-        cBg.setColor(BG_CARD_LIGHT);
-        content.setBackground(cBg);
-
-        mCollapse = content;
-
-        final boolean[] isOpen = {expanded};
-        header.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					isOpen[0] = !isOpen[0];
-					arrow.setText(isOpen[0] ? "\uEA4D" : "\uEA6D");
-					if (isOpen[0]) {
-						content.setVisibility(View.VISIBLE);
-						content.setAlpha(0f);
-						content.animate().alpha(1f).setDuration(200).start();
-					} else {
-						content.animate().alpha(0f).setDuration(150)
-							.withEndAction(new Runnable() {
-								@Override public void run() {
-									content.setVisibility(View.GONE);
-									content.setAlpha(1f);
-								}
-							}).start();
-					}
-				}
-			});
-
-        parent.addView(header);
-        parent.addView(content);
+        parent.addView(btn);
     }
 
     private void Category(LinearLayout parent, String text, String icon, int iconColor) {
@@ -1498,332 +1008,49 @@ public class Menu {
         parent.addView(container);
     }
 
-    interface OnInputResult { void onResult(String value); }
+    private void ButtonLink(LinearLayout parent, final String name, final String url, String icon, int accentColor) {
+        LinearLayout btn = new LinearLayout(getContext);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
+        params.setMargins(0, dp(ITEM_SPACING), 0, dp(ITEM_SPACING));
+        btn.setLayoutParams(params);
+        btn.setGravity(Gravity.CENTER);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
 
-    private void showNumberDialog(final String title, final int featNum, final long maxVal, final boolean isLong, final OnInputResult callback) {
-        final FrameLayout overlay = createDialogOverlay();
-        LinearLayout dialog = createDialogBox(title, ACCENT_PINK);
-
-        final EditText input = new EditText(getContext);
-        LinearLayout.LayoutParams iParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(50));
-        iParams.setMargins(0, dp(16), 0, dp(16));
-        input.setLayoutParams(iParams);
-        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
-        input.setTextColor(TEXT_PRIMARY);
-        input.setHintTextColor(TEXT_MUTED);
-        input.setHint(maxVal > 0 ? "Max: " + maxVal : "Enter number...");
-        input.setTextSize(16f);
-        input.setTypeface(menuFont);
-        input.setGravity(Gravity.CENTER);
-        input.setPadding(dp(14), dp(12), dp(14), dp(12));
-
-        GradientDrawable iBg = new GradientDrawable();
-        iBg.setCornerRadius(dp(RADIUS_M));
-        iBg.setColor(BG_INPUT);
-        input.setBackground(iBg);
-
-        LinearLayout btns = createDialogButtons(
-            new View.OnClickListener() {
-                @Override public void onClick(View v) { removeDialogOverlay(overlay); }
-            },
-            new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    String txt = input.getText().toString().trim();
-                    long val = 0;
-                    try {
-                        if (!txt.isEmpty()) val = Long.parseLong(txt);
-                        if (maxVal > 0 && val > maxVal) val = maxVal;
-                    } catch (NumberFormatException e) {
-                        val = maxVal > 0 ? maxVal : (isLong ? Long.MAX_VALUE : Integer.MAX_VALUE);
-                    }
-                    if (isLong) Preferences.changeFeatureLong(title, featNum, val);
-                    else Preferences.changeFeatureInt(title, featNum, (int) val);
-                    if (callback != null) callback.onResult(String.valueOf(val));
-                    removeDialogOverlay(overlay);
-                }
-            },
-            ACCENT_PINK
-        );
-
-        dialog.addView(input);
-        dialog.addView(btns);
-        showDialogOverlay(overlay, dialog);
-    }
-
-    private void showTextDialog(final String title, final int featNum, final OnInputResult callback) {
-        final FrameLayout overlay = createDialogOverlay();
-        LinearLayout dialog = createDialogBox(title, ACCENT_BLUE);
-
-        final EditText input = new EditText(getContext);
-        LinearLayout.LayoutParams iParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(50));
-        iParams.setMargins(0, dp(16), 0, dp(16));
-        input.setLayoutParams(iParams);
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setTextColor(TEXT_PRIMARY);
-        input.setHintTextColor(TEXT_MUTED);
-        input.setHint("Enter text...");
-        input.setTextSize(16f);
-        input.setTypeface(menuFont);
-        input.setGravity(Gravity.CENTER);
-        input.setPadding(dp(14), dp(12), dp(14), dp(12));
-
-        String currentVal = Preferences.loadPrefString(title, featNum);
-        if (currentVal != null && !currentVal.isEmpty()) input.setText(currentVal);
-
-        GradientDrawable iBg = new GradientDrawable();
-        iBg.setCornerRadius(dp(RADIUS_M));
-        iBg.setColor(BG_INPUT);
-        input.setBackground(iBg);
-
-        LinearLayout btns = createDialogButtons(
-            new View.OnClickListener() {
-                @Override public void onClick(View v) { removeDialogOverlay(overlay); }
-            },
-            new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    String txt = input.getText().toString();
-                    Preferences.changeFeatureString(title, featNum, txt);
-                    if (callback != null) callback.onResult(txt);
-                    removeDialogOverlay(overlay);
-                }
-            },
-            ACCENT_BLUE
-        );
-
-        dialog.addView(input);
-        dialog.addView(btns);
-        showDialogOverlay(overlay, dialog);
-    }
-
-    private void showSpinnerDialog(final String title, final int featNum, final List<String> items, final int[] selected, final TextView dropdown) {
-        final FrameLayout overlay = createDialogOverlay();
-        LinearLayout dialog = createDialogBox(title, ACCENT_PURPLE);
-
-        ScrollView sv = new ScrollView(getContext);
-        LinearLayout.LayoutParams svParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(200));
-        svParams.setMargins(0, dp(12), 0, 0);
-        sv.setLayoutParams(svParams);
-        sv.setVerticalScrollBarEnabled(true);
-
-        LinearLayout list = new LinearLayout(getContext);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(0, dp(4), 0, dp(4));
-
-        for (int i = 0; i < items.size(); i++) {
-            final int idx = i;
-            final String item = items.get(i);
-
-            LinearLayout itemContainer = new LinearLayout(getContext);
-            itemContainer.setOrientation(LinearLayout.HORIZONTAL);
-            itemContainer.setGravity(Gravity.CENTER_VERTICAL);
-            LinearLayout.LayoutParams icParams = new LinearLayout.LayoutParams(MATCH_PARENT, dp(44));
-            icParams.setMargins(0, dp(2), 0, dp(2));
-            itemContainer.setLayoutParams(icParams);
-            itemContainer.setPadding(dp(14), 0, dp(14), 0);
-
-            boolean isSelected = (selected[0] == i);
-
-            GradientDrawable icBg = new GradientDrawable();
-            icBg.setCornerRadius(dp(RADIUS_M));
-            icBg.setColor(isSelected ? Color.parseColor("#33A99FD3") : BG_CARD_LIGHT);
-            itemContainer.setBackground(icBg);
-
-            TextView checkIcon = new TextView(getContext);
-            checkIcon.setText("\uEB7A");
-            checkIcon.setTextColor(ACCENT_PURPLE);
-            checkIcon.setTextSize(14f);
-            checkIcon.setTypeface(iconFont);
-            checkIcon.setVisibility(isSelected ? View.VISIBLE : View.INVISIBLE);
-            LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(dp(24), dp(24));
-            checkParams.setMargins(0, 0, dp(8), 0);
-            checkIcon.setLayoutParams(checkParams);
-            checkIcon.setGravity(Gravity.CENTER);
-            itemContainer.addView(checkIcon);
-
-            TextView itemView = new TextView(getContext);
-            itemView.setText(item);
-            itemView.setTextColor(isSelected ? ACCENT_PURPLE : TEXT_PRIMARY);
-            itemView.setTextSize(14f);
-            itemView.setTypeface(menuFont);
-            itemView.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
-            itemContainer.addView(itemView);
-
-            itemContainer.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View v) {
-						selected[0] = idx;
-						dropdown.setText(item);
-						Preferences.changeFeatureInt(title, featNum, idx);
-						removeDialogOverlay(overlay);
-					}
-				});
-
-            list.addView(itemContainer);
-        }
-
-        sv.addView(list);
-        dialog.addView(sv);
-        showDialogOverlay(overlay, dialog);
-
-        overlay.setOnClickListener(new View.OnClickListener() {
-				@Override public void onClick(View v) { removeDialogOverlay(overlay); }
-			});
-    }
-
-    private FrameLayout createDialogOverlay() {
-        FrameLayout overlay = new FrameLayout(getContext);
-        overlay.setLayoutParams(new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
-        overlay.setBackgroundColor(Color.parseColor("#CC000000"));
-        overlay.setClickable(true);
-        return overlay;
-    }
-
-    private LinearLayout createDialogBox(String title, int accentColor) {
-        LinearLayout box = new LinearLayout(getContext);
-        box.setOrientation(LinearLayout.VERTICAL);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(280), WRAP_CONTENT);
-        params.gravity = Gravity.CENTER;
-        box.setLayoutParams(params);
-        box.setPadding(dp(20), dp(20), dp(20), dp(20));
-        box.setClickable(true);
+        int linkColor = (icon != null) ? accentColor : ACCENT_BLUE;
 
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(RADIUS_XL));
-        bg.setColor(BG_PRIMARY);
-        bg.setStroke(dp(2), accentColor);
-        box.setBackground(bg);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            box.setElevation(dp(20));
+        bg.setCornerRadius(dp(RADIUS_L));
+        bg.setStroke(dp(1), linkColor);
+        btn.setBackground(bg);
+
+        if (icon != null) {
+            TextView iconView = new TextView(getContext);
+            iconView.setText(icon);
+            iconView.setTextColor(linkColor);
+            iconView.setTextSize(14f);
+            iconView.setTypeface(iconFont);
+            iconView.setPadding(0, 0, dp(8), 0);
+            btn.addView(iconView);
         }
 
-        TextView titleView = new TextView(getContext);
-        titleView.setText(title);
-        titleView.setTextColor(accentColor);
-        titleView.setTextSize(16f);
-        titleView.setTypeface(menuFont, Typeface.BOLD);
-        titleView.setGravity(Gravity.CENTER);
-        box.addView(titleView);
+        TextView text = new TextView(getContext);
+        text.setText(Html.fromHtml(name));
+        text.setTextColor(linkColor);
+        text.setTextSize(14f);
+        text.setTypeface(menuFont);
+        btn.addView(text);
 
-        return box;
-    }
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                i.setData(Uri.parse(url));
+                getContext.startActivity(i);
+            }
+        });
 
-    private LinearLayout createDialogButtons(View.OnClickListener onCancel, View.OnClickListener onOk, int okColor) {
-        LinearLayout btns = new LinearLayout(getContext);
-        btns.setOrientation(LinearLayout.HORIZONTAL);
-        btns.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams btnsParams = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
-        btnsParams.topMargin = dp(8);
-        btns.setLayoutParams(btnsParams);
-
-        LinearLayout.LayoutParams bParams = new LinearLayout.LayoutParams(0, dp(42), 1);
-        bParams.setMargins(dp(4), 0, dp(4), 0);
-
-        LinearLayout cancelBtn = new LinearLayout(getContext);
-        cancelBtn.setLayoutParams(bParams);
-        cancelBtn.setGravity(Gravity.CENTER);
-        cancelBtn.setOrientation(LinearLayout.HORIZONTAL);
-
-        GradientDrawable cBg = new GradientDrawable();
-        cBg.setCornerRadius(dp(RADIUS_M));
-        cBg.setColor(BG_CARD);
-        cancelBtn.setBackground(cBg);
-
-        TextView cancelIcon = new TextView(getContext);
-        cancelIcon.setText("\uE4F6");
-        cancelIcon.setTextColor(TEXT_SECONDARY);
-        cancelIcon.setTextSize(14f);
-        cancelIcon.setTypeface(iconFont);
-        cancelIcon.setPadding(0, 0, dp(6), 0);
-        cancelBtn.addView(cancelIcon);
-
-        TextView cancelText = new TextView(getContext);
-        cancelText.setText("Cancel");
-        cancelText.setTextColor(TEXT_SECONDARY);
-        cancelText.setTextSize(13f);
-        cancelText.setTypeface(menuFont);
-        cancelBtn.addView(cancelText);
-
-        cancelBtn.setOnClickListener(onCancel);
-
-        LinearLayout okBtn = new LinearLayout(getContext);
-        okBtn.setLayoutParams(bParams);
-        okBtn.setGravity(Gravity.CENTER);
-        okBtn.setOrientation(LinearLayout.HORIZONTAL);
-
-        GradientDrawable oBg = new GradientDrawable();
-        oBg.setCornerRadius(dp(RADIUS_M));
-        oBg.setColor(okColor);
-        okBtn.setBackground(oBg);
-
-        TextView okIcon = new TextView(getContext);
-        okIcon.setText("\uEB7A");
-        okIcon.setTextColor(BG_PRIMARY);
-        okIcon.setTextSize(14f);
-        okIcon.setTypeface(iconFont);
-        okIcon.setPadding(0, 0, dp(6), 0);
-        okBtn.addView(okIcon);
-
-        TextView okText = new TextView(getContext);
-        okText.setText("OK");
-        okText.setTextColor(BG_PRIMARY);
-        okText.setTextSize(13f);
-        okText.setTypeface(menuFont, Typeface.BOLD);
-        okBtn.addView(okText);
-
-        okBtn.setOnClickListener(onOk);
-
-        btns.addView(cancelBtn);
-        btns.addView(okBtn);
-
-        return btns;
-    }
-
-    @SuppressLint("WrongConstant")
-    private void showDialogOverlay(final FrameLayout overlay, final LinearLayout dialog) {
-        overlay.addView(dialog);
-        overlay.setAlpha(0f);
-        dialog.setScaleX(0.85f);
-        dialog.setScaleY(0.85f);
-
-        if (overlayRequired) {
-            int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
-                WindowManager.LayoutParams.TYPE_PHONE;
-
-            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                MATCH_PARENT, MATCH_PARENT, type,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
-                PixelFormat.TRANSLUCENT
-            );
-            mWindowManager.addView(overlay, params);
-        } else {
-            ((Activity) getContext).addContentView(overlay, new ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT));
-        }
-
-        overlay.animate().alpha(1f).setDuration(200).start();
-        dialog.animate().scaleX(1f).scaleY(1f).setDuration(250).setInterpolator(new OvershootInterpolator(1.1f)).start();
-    }
-
-    private void removeDialogOverlay(final FrameLayout overlay) {
-        overlay.animate().alpha(0f).setDuration(150)
-            .withEndAction(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        if (overlayRequired) {
-                            if (mWindowManager != null && overlay.isAttachedToWindow()) {
-                                mWindowManager.removeView(overlay);
-                            }
-                        } else {
-                            ViewGroup parent = (ViewGroup) overlay.getParent();
-                            if (parent != null) parent.removeView(overlay);
-                        }
-                    } catch (Exception e) {}
-                }
-            }).start();
+        parent.addView(btn);
     }
 
     private void featureList(String[] list, LinearLayout container) {
@@ -1840,10 +1067,6 @@ public class Menu {
             }
 
             target = container;
-            if (feature.contains("CollapseAdd_")) {
-                target = mCollapse;
-                feature = feature.replace("CollapseAdd_", "");
-            }
 
             String icon = extractIcon(feature);
             int iconColor = getColorForIcon(icon);
@@ -1871,33 +1094,6 @@ public class Menu {
                 case "Button":
                     Button(target, featNum, p[1], icon, iconColor);
                     break;
-                case "ButtonOnOff":
-                    ButtonOnOff(target, featNum, p[1], defOn, icon);
-                    break;
-                case "Spinner":
-                    Spinner(target, featNum, p[1], p[2], icon, iconColor);
-                    break;
-                case "InputText":
-                    InputText(target, featNum, p[1], icon, iconColor);
-                    break;
-                case "InputValue":
-                    if (p.length == 3) InputNum(target, featNum, p[2], Integer.parseInt(p[1]), icon, iconColor);
-                    else InputNum(target, featNum, p[1], 0, icon, iconColor);
-                    break;
-                case "InputLValue":
-                    if (p.length == 3) InputLNum(target, featNum, p[2], Long.parseLong(p[1]), icon, iconColor);
-                    else InputLNum(target, featNum, p[1], 0, icon, iconColor);
-                    break;
-                case "CheckBox":
-                    CheckBox(target, featNum, p[1], defOn, icon, iconColor);
-                    break;
-                case "RadioButton":
-                    RadioButton(target, featNum, p[1], p[2], icon, iconColor);
-                    break;
-                case "Collapse":
-                    Collapse(target, p[1], defOn, icon, iconColor);
-                    subFeat++;
-                    break;
                 case "ButtonLink":
                     ButtonLink(target, p[1], p[2], icon, iconColor);
                     subFeat++;
@@ -1920,35 +1116,35 @@ public class Menu {
 
         final Handler handler = new Handler();
         handler.postDelayed(new Runnable() {
-				boolean loaded = false;
-				@Override
-				public void run() {
-					if (Preferences.loadPref && !IsGameLibLoaded() && !stopChecking) {
-						if (!loaded) {
-							Category(mods, "LOADING", "\uF080", ACCENT_BLUE);
-							TextView(mods, "Waiting for game library...", "\uF210", TEXT_MUTED);
-							Button(mods, -100, "Force Load", "\uED3D", ACCENT_PEACH);
-							loaded = true;
-						}
-						handler.postDelayed(this, 500);
-					} else {
-						mods.removeAllViews();
-						featureList(GetFeatureList(), mods);
-					}
-				}
-			}, 300);
+            boolean loaded = false;
+            @Override
+            public void run() {
+                if (Preferences.loadPref && !IsGameLibLoaded() && !stopChecking) {
+                    if (!loaded) {
+                        Category(mods, "LOADING", "\uF080", ACCENT_BLUE);
+                        TextView(mods, "Waiting for game library...", "\uF210", TEXT_MUTED);
+                        Button(mods, -100, "Force Load", "\uED3D", ACCENT_PEACH);
+                        loaded = true;
+                    }
+                    handler.postDelayed(this, 500);
+                } else {
+                    mods.removeAllViews();
+                    featureList(GetFeatureList(), mods);
+                }
+            }
+        }, 300);
     }
 
     @SuppressLint("WrongConstant")
     public void SetWindowManagerWindowService() {
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
-            WindowManager.LayoutParams.TYPE_PHONE;
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
+                WindowManager.LayoutParams.TYPE_PHONE;
 
         vmParams = new WindowManager.LayoutParams(
-            WRAP_CONTENT, WRAP_CONTENT, type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
+                WRAP_CONTENT, WRAP_CONTENT, type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
         );
         vmParams.gravity = Gravity.TOP | Gravity.START;
         vmParams.x = POS_X;
@@ -1964,10 +1160,10 @@ public class Menu {
     @SuppressLint("WrongConstant")
     public void SetWindowManagerActivity() {
         vmParams = new WindowManager.LayoutParams(
-            WRAP_CONTENT, WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
+                WRAP_CONTENT, WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
         );
         vmParams.gravity = Gravity.TOP | Gravity.START;
         vmParams.x = POS_X;
@@ -2014,10 +1210,10 @@ public class Menu {
                             mExpanded.setScaleX(0.9f);
                             mExpanded.setScaleY(0.9f);
                             mExpanded.animate()
-                                .alpha(1f).scaleX(1f).scaleY(1f)
-                                .setDuration(250)
-                                .setInterpolator(new OvershootInterpolator(1.1f))
-                                .start();
+                                    .alpha(1f).scaleX(1f).scaleY(1f)
+                                    .setDuration(250)
+                                    .setInterpolator(new OvershootInterpolator(1.1f))
+                                    .start();
                         }
                         return true;
                 }
@@ -2063,8 +1259,11 @@ public class Menu {
 
     public void onDestroy() {
         destroyESP();
+        if (miniMapOverlay != null) {
+            miniMapOverlay.hide();
+        }
         if (rootFrame != null && mWindowManager != null) {
-            try { mWindowManager.removeView(rootFrame); } catch (Exception e) {}
+            try { mWindowManager.removeView(rootFrame); } catch (Exception ignored) {}
         }
     }
 
