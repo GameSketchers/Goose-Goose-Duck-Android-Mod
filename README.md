@@ -56,7 +56,7 @@
 
 Want to update offsets for a new game patch? Check out our automated Python tool:
 
-👉 [**Read the Offset Auto-Updater Tutorial (`TUTORIAL.md`)**](./TUTORIAL.md)
+👉 [**Read the Offset Auto-Updater Tutorial (`TUTORIAL.md`)**](./OFFSET_TUTORIAL.md)
 
 ---
 
