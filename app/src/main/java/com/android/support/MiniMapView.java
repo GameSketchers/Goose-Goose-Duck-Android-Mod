@@ -6,8 +6,6 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,7 +14,9 @@ import android.view.View;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MiniMapView extends View {
 
@@ -24,22 +24,46 @@ public class MiniMapView extends View {
         public float worldX, worldY;
         public boolean isDead;
         public boolean isLocal;
-        public int color;
+        public int colorId;
         public String name;
 
-        public MapEntity(float x, float y, boolean dead, boolean local, int c, String n) {
+        public MapEntity(float x, float y, boolean dead, boolean local, int cId, String n) {
             this.worldX = x;
             this.worldY = y;
             this.isDead = dead;
             this.isLocal = local;
-            this.color = c;
+            this.colorId = cId;
             this.name = n;
         }
     }
 
+    private static final String[] COLOR_NAMES = {
+            "red",         // 0
+            "blue",        // 1
+            "yellow",      // 2
+            "green",       // 3
+            "light_pink",  // 4
+            "orange",      // 5
+            "beige",       // 6
+            "white",       // 7
+            "dark_gray",   // 8
+            "purple",      // 9
+            "lime",        // 10
+            "cyan",        // 11
+            "pink",        // 12
+            "gray",        // 13
+            "brown",       // 14
+            "navy",        // 15
+            "olive",       // 16
+            "black",       // 17
+            "maroon",      // 18
+            "cream"        // 19
+    };
+
     private volatile Bitmap mapBitmap = null;
-    private Bitmap aliveIcon = null;
-    private Bitmap deadIcon = null;
+    private final Map<Integer, Bitmap> aliveIcons = new HashMap<>();
+    private final Map<Integer, Bitmap> deadIcons = new HashMap<>();
+
     private String currentMapKey = "";
 
     public static boolean showPlayers = true;
@@ -47,9 +71,7 @@ public class MiniMapView extends View {
     public static boolean touchTeleportEnabled = true;
 
     private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint alivePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final Paint deadPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final Paint fallbackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint localRingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -88,24 +110,32 @@ public class MiniMapView extends View {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                try {
-                    InputStream isAlive = context.getAssets().open("alive_goose.png");
-                    final Bitmap bAlive = BitmapFactory.decodeStream(isAlive);
-                    isAlive.close();
+                for (int i = 0; i < COLOR_NAMES.length; i++) {
+                    String colorName = COLOR_NAMES[i];
+                    final int id = i;
 
-                    InputStream isDead = context.getAssets().open("dead_body.png");
-                    final Bitmap bDead = BitmapFactory.decodeStream(isDead);
-                    isDead.close();
-
-                    mainHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            aliveIcon = bAlive;
-                            deadIcon = bDead;
-                            postInvalidate();
+                    try {
+                        InputStream is = context.getAssets().open("alive_gooses/alive_goose_" + colorName + ".png");
+                        final Bitmap bmp = BitmapFactory.decodeStream(is);
+                        is.close();
+                        if (bmp != null) {
+                            mainHandler.post(new Runnable() {
+                                @Override public void run() { aliveIcons.put(id, bmp); }
+                            });
                         }
-                    });
-                } catch (Exception ignored) {}
+                    } catch (Exception ignored) {}
+
+                    try {
+                        InputStream is = context.getAssets().open("dead_bodys/dead_body_" + colorName + ".png");
+                        final Bitmap bmp = BitmapFactory.decodeStream(is);
+                        is.close();
+                        if (bmp != null) {
+                            mainHandler.post(new Runnable() {
+                                @Override public void run() { deadIcons.put(id, bmp); }
+                            });
+                        }
+                    } catch (Exception ignored) {}
+                }
             }
         }).start();
     }
@@ -124,6 +154,7 @@ public class MiniMapView extends View {
             case 9:  baseName = "bloodhaven_mini_map"; break;
             case 10: baseName = "eagleton_springs_mini_map"; break;
             case 11: baseName = "carnival_mini_map"; break;
+            case 12: baseName = "mallardon_mini_map"; break;
             default: baseName = "goosechapel_mini_map"; break;
         }
         loadMapAsync(baseName);
@@ -165,46 +196,84 @@ public class MiniMapView extends View {
 
     private void adjustBoundsForMap(String name) {
         switch (name) {
+            // ID 0: Goosechapel (1024x768 - 4:3)
             case "goosechapel_mini_map":
                 worldMinX = -36.0f; worldMaxX = 46.0f;
                 worldMinY = -40.0f; worldMaxY = 22.0f;
                 break;
-            case "ancient_sands_mini_map":
-                worldMinX = -45.0f; worldMaxX = 45.0f;
-                worldMinY = -35.0f; worldMaxY = 35.0f;
-                break;
+
+            // ID 1: Mallard Manor (1200x900 - 4:3)
             case "mallard_manor_mini_map":
-                worldMinX = -42.0f; worldMaxX = 42.0f;
-                worldMinY = -32.0f; worldMaxY = 32.0f;
+                worldMinX = -27.6f; worldMaxX = 41.7f;
+                worldMinY = -42.0f; worldMaxY = 10.0f;
                 break;
+
+            // ID 2: Nexus Colony (1200x900 - 4:3)
+            case "nexus_colony_mini_map":
+                worldMinX = -68.0f; worldMaxX = 64.0f;
+                worldMinY = -49.5f; worldMaxY = 49.5f;
+                break;
+
+            // ID 3: Black Swan (1200x900 - 4:3)
             case "black_swan_mini_map":
                 worldMinX = -48.0f; worldMaxX = 48.0f;
                 worldMinY = -36.0f; worldMaxY = 36.0f;
                 break;
+
+            // ID 4: S.S. Mother Goose (1200x900 - 4:3)
             case "mother_goose_mini_map":
                 worldMinX = -50.0f; worldMaxX = 50.0f;
                 worldMinY = -37.5f; worldMaxY = 37.5f;
                 break;
-            case "nexus_colony_mini_map":
-                worldMinX = -45.0f; worldMaxX = 45.0f;
-                worldMinY = -34.0f; worldMaxY = 34.0f;
-                break;
-            case "bloodhaven_mini_map":
-                worldMinX = -46.0f; worldMaxX = 46.0f;
-                worldMinY = -35.0f; worldMaxY = 35.0f;
-                break;
+
+            // ID 6: Jungle Temple (1024x768 - 4:3)
             case "jungle_temple_mini_map":
+                worldMinX = -41.0f; worldMaxX = 45.0f;
+                worldMinY = -40.0f; worldMaxY = 24.5f;
+                break;
+
+            // ID 7: The Basement (1024x768 - 4:3)
+            case "basement_mini_map":
                 worldMinX = -40.0f; worldMaxX = 40.0f;
                 worldMinY = -30.0f; worldMaxY = 30.0f;
                 break;
-            case "carnival_mini_map":
-                worldMinX = -44.0f; worldMaxX = 44.0f;
-                worldMinY = -33.0f; worldMaxY = 33.0f;
+
+            // ID 8: Ancient Sands (1024x768 - 4:3)
+            case "ancient_sands_mini_map":
+                worldMinX = -46.5f; worldMaxX = 46.5f;
+                worldMinY = -35.0f; worldMaxY = 35.0f;
                 break;
+
+            // ID 9: Bloodhaven (1207x907 - ~4:3)
+            case "bloodhaven_mini_map":
+                worldMinX = -46.0f; worldMaxX = 46.0f;
+                worldMinY = -34.6f; worldMaxY = 34.6f;
+                break;
+
+            // ID 10: Eagleton Springs (1024x1024 - 1:1 Kare)
             case "eagleton_springs_mini_map":
-                worldMinX = -40.0f; worldMaxX = 40.0f;
-                worldMinY = -40.0f; worldMaxY = 40.0f;
+                worldMinX = -42.0f; worldMaxX = 42.0f;
+                worldMinY = -42.0f; worldMaxY = 42.0f;
                 break;
+
+            // Eagleton Springs Sewers (1024x1024 - 1:1 Kare)
+            case "eagleton_springs_sewers_mini_map":
+                worldMinX = -32.0f; worldMaxX = 32.0f;
+                worldMinY = -32.0f; worldMaxY = 32.0f;
+                break;
+
+            // ID 11: The Carnival (1200x900 - 4:3)
+            case "carnival_mini_map":
+                worldMinX = -50.0f; worldMaxX = 37.0f;
+                worldMinY = -62.0f; worldMaxY = 3.2f;
+                break;
+
+            // ID 12: Mallardon / Godzilla (1200x900 - 4:3)
+            case "mallardon_mini_map":
+                worldMinX = -48.0f; worldMaxX = 48.0f;
+                worldMinY = -36.0f; worldMaxY = 36.0f;
+                break;
+
             default:
                 worldMinX = -45.0f; worldMaxX = 45.0f;
                 worldMinY = -45.0f; worldMaxY = 45.0f;
@@ -242,7 +311,7 @@ public class MiniMapView extends View {
             canvas.drawBitmap(curBmp, null, renderMapRect, null);
         } else {
             renderMapRect.set(0, 0, w, h);
-            canvas.drawText("Loading Map...", w * 0.5f, h * 0.5f, textPaint);
+            canvas.drawText("Loading: " + currentMapKey, w * 0.5f, h * 0.5f, textPaint);
         }
 
         synchronized (this) {
@@ -261,28 +330,20 @@ public class MiniMapView extends View {
                 if (mapY < renderMapRect.top + 4) mapY = renderMapRect.top + 4;
                 if (mapY > renderMapRect.bottom - 4) mapY = renderMapRect.bottom - 4;
 
-                int pColor = (ent.color != 0) ? ent.color : Color.WHITE;
-
                 if (ent.isDead) {
-                    if (deadIcon != null) {
+                    Bitmap icon = deadIcons.get(ent.colorId);
+                    if (icon != null) {
                         float iconSize = 22f;
                         RectF dst = new RectF(mapX - iconSize * 0.5f, mapY - iconSize * 0.5f, mapX + iconSize * 0.5f, mapY + iconSize * 0.5f);
-                        deadPaint.setColorFilter(new PorterDuffColorFilter(pColor, PorterDuff.Mode.SRC_ATOP));
-                        canvas.drawBitmap(deadIcon, null, dst, deadPaint);
-                    } else {
-                        fallbackPaint.setColor(pColor);
-                        canvas.drawCircle(mapX, mapY, 7f, fallbackPaint);
+                        canvas.drawBitmap(icon, null, dst, bitmapPaint);
                     }
                 } else {
-                    if (aliveIcon != null) {
+                    Bitmap icon = aliveIcons.get(ent.colorId);
+                    if (icon != null) {
                         float iconW = 14f;
                         float iconH = 26f;
                         RectF dst = new RectF(mapX - iconW * 0.5f, mapY - iconH * 0.5f, mapX + iconW * 0.5f, mapY + iconH * 0.5f);
-                        alivePaint.setColorFilter(new PorterDuffColorFilter(pColor, PorterDuff.Mode.SRC_ATOP));
-                        canvas.drawBitmap(aliveIcon, null, dst, alivePaint);
-                    } else {
-                        fallbackPaint.setColor(pColor);
-                        canvas.drawCircle(mapX, mapY, 7f, fallbackPaint);
+                        canvas.drawBitmap(icon, null, dst, bitmapPaint);
                     }
                 }
 

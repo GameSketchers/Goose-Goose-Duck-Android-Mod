@@ -187,22 +187,15 @@ public class MiniMapOverlay {
         for (String entry : entries) {
             if (entry.isEmpty()) continue;
             String[] p = entry.split(",");
-            if (p.length >= 6) {
+            if (p.length >= 5) {
                 try {
                     float x = Float.parseFloat(p[0]);
                     float y = Float.parseFloat(p[1]);
                     boolean dead = p[2].equals("1");
                     boolean local = p[3].equals("1");
-
-                    int color;
-                    try {
-                        color = (int) Long.parseLong(p[4]);
-                    } catch (Exception ex) {
-                        color = Color.WHITE;
-                    }
-
-                    String name = p[5];
-                    list.add(new MiniMapView.MapEntity(x, y, dead, local, color, name));
+                    int colorId = Integer.parseInt(p[4]);
+                    String name = (p.length >= 6) ? p[5] : "";
+                    list.add(new MiniMapView.MapEntity(x, y, dead, local, colorId, name));
                 } catch (Exception ignored) {}
             }
         }

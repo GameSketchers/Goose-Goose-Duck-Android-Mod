@@ -47,8 +47,8 @@ FIELD_TARGETS = {
         "OFFSET_PE_ISINPELICAN": [r"\bbool\s+isInPelican\b"],
         "OFFSET_PE_ISMORPHED": [r"\bbool\s+isMorphed\b"],
         "OFFSET_PE_ISSPECTATOR": [r"\bbool\s+isSpectator\b"],
+        "OFFSET_PE_COSMETICS": [r"\bCosmeticsData\s+cosmetics\b"],
         "OFFSET_PE_TRANSFORMVIEW": [r"\bBetterPhotonTransformView\s+transformView\b"],
-        "OFFSET_PE_BODYCOLLIDER": [r"\bCapsuleCollider2D\s+bodyCollider\b"],
         "OFFSET_PE_PLAYERCOLLIDER": [r"\bCapsuleCollider2D\s+playerCollider\b"],
         "OFFSET_PE_WALLCHECKCOLLIDER": [r"\bCapsuleCollider2D\s+wallCheckCollider\b"],
         "OFFSET_PE_WALLCOLLISIONHANDLER": [r"\bWallCollisionCheckHandler\s+wallCollisionCheckHandler\b"],
@@ -70,6 +70,9 @@ FIELD_TARGETS = {
         "OFFSET_LP_INGAMESTARTSPOTLIGHT": [r"\bbool\s+inGameStartSpotlightScreen\b"],
         "OFFSET_LP_INGAMEENDSPOTLIGHT": [r"\bbool\s+inGameEndSpotlightScreen\b"],
         "OFFSET_LP_CANSEEGHOSTS": [r"\bbool\s+canSeeGhosts\b"]
+    },
+    "MapManager": {
+        "OFFSET_MM_ROOMMAP": [r"\bstring\s+roomMap\b"]
     },
     "BetterPhotonTransformView": {
         "OFFSET_TV_LATESTPOS": [r"\bVector2\s+latestPos\b"],
@@ -132,6 +135,7 @@ METHOD_TARGETS = {
     ("PlayerPropertiesManager", "ChangeReadyState"): r"void\s+ChangeReadyState\s*\(",
     ("PlayerPropertiesManager", "GetUserProperties"): r"PlayerProperties\s+GetUserProperties\s*\(",
 
+    ("MapManager", "Internal_OnMapStart"): r"void\s+Internal_OnMapStart\s*\(",
     ("MapManager", "Internal_OnMapLoad"): r"void\s+Internal_OnMapLoad\s*\(",
 
     ("Collider2D", "set_isTrigger"): r"void\s+set_isTrigger\s*\(",
@@ -231,7 +235,6 @@ def update_cpp(cpp_path, typedefs, fields, methods):
 
     total_changes = 0
 
-    # 1. Update TypeDefIndex comments
     for cls_name, tdef in typedefs.items():
         pattern = rf"(//\s*{cls_name}\s*\(TypeDefIndex:\s*)\d+(\))"
         new_content, count = re.subn(pattern, rf"\g<1>{tdef}\g<2>", content)
@@ -239,7 +242,6 @@ def update_cpp(cpp_path, typedefs, fields, methods):
             content = new_content
             total_changes += count
 
-    # 2. Update #define Field Offsets
     print(f"\n{C.MAGENTA}--- Updating Field Offsets ---{C.RESET}")
     for def_name, new_offset in fields.items():
         pattern = rf"(#define\s+{def_name}\s+)0x[0-9A-Fa-f]+"
@@ -249,7 +251,6 @@ def update_cpp(cpp_path, typedefs, fields, methods):
             total_changes += count
             print(f"    {C.GREEN}[+]{C.RESET} {def_name:<34} -> {C.YELLOW}{new_offset}{C.RESET}")
 
-    # 3. Update Method RVAs in Comments, HOOKs, and getAbsoluteAddress calls
     print(f"\n{C.MAGENTA}--- Updating Method RVAs & Hooks ---{C.RESET}")
     for method_key, new_rva in methods.items():
         comment_pattern = rf"(//\s*{re.escape(method_key)}\s*-\s*RVA:\s*)0x[0-9A-Fa-f]+"

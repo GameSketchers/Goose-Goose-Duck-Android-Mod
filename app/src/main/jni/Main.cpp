@@ -28,6 +28,7 @@ bool MiniMapShowDead = true;
 bool MiniMapTouchTP = true;
 bool MiniMapHideInVote = true;
 
+// ESP Ayarları (Orijinal Yapı)
 bool ESPEnabled = true;
 bool ESPLines = true;
 bool ESPBox = true;
@@ -39,15 +40,18 @@ bool ESPHideInLobby = false;
 bool SeeGhosts = true;
 bool DebugMode = false;
 
+// Görev & Sabotaj Ayarları
 bool SafeAutoTasks = false;
 bool AutoRepairSabotage = false;
 bool btnRepairSabotageNow = false;
 bool btnCompleteOneTask = false;
 bool btnUnlockSabotages = false;
 
+// İletişim
 bool HearDeadVoice = false;
 bool HearFarPlayers = false;
 
+// Hareket & Diğer
 bool AutoReady = false;
 bool AntiDeath = false;
 bool UnlimitedVision = false;
@@ -61,7 +65,7 @@ float SpeedMultiplier = 1.5f;
 
 bool btnCallEmergency = false;
 
-// Thread-safe teleport kuyruğu (Crash logundaki SIGSEGV'i engeller)
+// Thread-safe teleport kuyruğu (Crash engelleme)
 std::atomic<bool> g_PendingDirectTP(false);
 std::atomic<float> g_TargetDirectTPX(0.0f);
 std::atomic<float> g_TargetDirectTPY(0.0f);
@@ -70,6 +74,7 @@ void* g_TasksHandler = NULL;
 void* g_RoofHandler = NULL;
 void* g_GameManager = NULL;
 void* g_PlayerPropertiesManager = NULL;
+void* g_MapManager = NULL;
 bool g_RoofRemovedThisRound = false;
 
 std::chrono::steady_clock::time_point g_LastSafeTaskTime;
@@ -85,7 +90,8 @@ bool isInGame = false;
 bool isInLobby = true;
 int localPlayerRole = 0;
 int g_CurrentGameState = 0;
-int g_CurrentMapId = 0;
+int g_CurrentMapId = -1;
+char g_CurrentMapName[64] = "None";
 
 int g_DroneViewDelay = 0;
 #define DRONE_VIEW_DELAY_FRAMES 60
@@ -134,12 +140,16 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_ISINPELICAN        0x18D
 #define OFFSET_PE_ISMORPHED          0x18F
 #define OFFSET_PE_ISSPECTATOR        0x200
+#define OFFSET_PE_COSMETICS          0x230
 #define OFFSET_PE_TRANSFORMVIEW      0x2C8
 #define OFFSET_PE_PLAYERCOLLIDER     0x2E0
 #define OFFSET_PE_WALLCHECKCOLLIDER  0x2E8
 #define OFFSET_PE_WALLCOLLISIONHANDLER 0x2F0
 #define OFFSET_PE_CONFINECOLLIDER    0x2F8
 #define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
+
+// MapManager (TypeDefIndex: 1288)
+#define OFFSET_MM_ROOMMAP            0x180
 
 // PlayerController (TypeDefIndex: 6407)
 #define OFFSET_PC_READYSTATE         0x388
@@ -193,11 +203,13 @@ struct PlayerData {
     void* instance;
     Vector2 position;
     Vector2 killedLocation;
+    bool hasKilledLoc;
     bool isGhost;
     bool isLocal;
     int role;
     int teamId;
     int entityNumber;
+    int cosmColorVal;
     char name[128];
     bool isValid;
     float distanceToCamera;
@@ -366,6 +378,7 @@ Vector2 GetCameraPosition2D() {
 
 void WideCharToUTF8(void* instance, uintptr_t offset, char* outName, int maxLen) {
     memset(outName, 0, maxLen);
+    if (!instance) return;
     uintptr_t strPtr = *(uintptr_t*)((uintptr_t)instance + offset);
     if (!strPtr) { strcpy(outName, ""); return; }
     int length = *(int*)(strPtr + 0x10);
@@ -408,34 +421,27 @@ int GetRoleType(void* instance) {
     return (int)*(short*)((uintptr_t)rolePtr + OFFSET_ROLE_TYPE);
 }
 
-int GetPlayerExactColor(void* instance) {
-    if (!instance) return 0xFFFFFFFF;
-
-    static const int GoosePalette[] = {
-            0xFFFF2020, // 0: Kırmızı
-            0xFF2060FF, // 1: Mavi
-            0xFF20D040, // 2: Yeşil
-            0xFFFF80D0, // 3: Pembe
-            0xFFFF9020, // 4: Turuncu
-            0xFFFFFF30, // 5: Sarı
-            0xFF404040, // 6: Siyah
-            0xFFF0F0F0, // 7: Beyaz
-            0xFF9040C0, // 8: Mor
-            0xFF905030, // 9: Kahverengi
-            0xFF20E0E0, // 10: Camgöbeği (Cyan)
-            0xFF80FF80, // 11: Açık Yeşil
-            0xFF708090, // 12: Gri
-            0xFFFFB6C1, // 13: Açık Pembe
-            0xFFDDA0DD, // 14: Erik (Plum)
-            0xFFFFD700  // 15: Altın Sarısı
-    };
-
-    int entityNum = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
-    if (entityNum >= 0 && entityNum < 16) {
-        return GoosePalette[entityNum];
+int GetPlayerColorId(void* instance) {
+    if (!instance) return 0;
+    void* cosm = *(void**)((uintptr_t)instance + OFFSET_PE_COSMETICS);
+    if (cosm) {
+        int colorId = *(int*)((uintptr_t)cosm + 0x10);
+        if (colorId >= 0 && colorId < 20) return colorId;
     }
+    int entityNum = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
+    return (entityNum >= 0 && entityNum < 20) ? entityNum : 0;
+}
 
-    return 0xFFFFFFFF;
+void DetectCurrentMap() {
+    if (g_MapManager) {
+        WideCharToUTF8(g_MapManager, OFFSET_MM_ROOMMAP, g_CurrentMapName, sizeof(g_CurrentMapName));
+        if (g_CurrentMapName[0] != '\0') {
+            int parsedId = atoi(g_CurrentMapName);
+            if (parsedId >= 0 && parsedId < 15) {
+                g_CurrentMapId = parsedId;
+            }
+        }
+    }
 }
 
 float GetCurrentOrthoSize() {
@@ -474,7 +480,7 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
 }
 
 float GetESPScale() {
-    float orthoSize = GetCurrentOrthoSize();
+    float orthoSize = g_DefaultOrthoSize;
     if (orthoSize <= 0) orthoSize = 5.0f;
     return g_ScreenHeight / (orthoSize * 2.0f);
 }
@@ -624,15 +630,13 @@ RoleInfo GetRoleInfo(int roleId) {
 void ApplyDroneViewDelayed() {
     if (!localPlayerObject || !OverrideOrthographicSize) return;
     if (DroneView) {
-        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) {
-            g_DroneViewDelay++;
-            return;
-        }
+        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) { g_DroneViewDelay++; return; }
         if (!g_DroneViewInitialized) {
             g_DroneViewInitialized = true;
             g_DroneViewReady = true;
             OverrideOrthographicSize(localPlayerObject, DroneZoom);
-        } else if (g_DroneViewReady) {
+        }
+        else if (g_DroneViewReady) {
             OverrideOrthographicSize(localPlayerObject, DroneZoom);
         }
     }
@@ -706,30 +710,29 @@ void SendBatchESP(JNIEnv* env) {
 void SendMiniMapBatch(JNIEnv* env) {
     if (!env || !g_MenuClass || !g_SetMiniMapVisibleMethod) return;
 
-    // SADECE ve SADECE oyunun içindeyken (Lobi değil, ana menü değil) haritayı göster
-    bool isPlayingGame = isInGame && !isInLobby && (localPlayerInstance != NULL);
+    bool isPlaying = isInGame && !isInLobby && (localPlayerInstance != NULL) && !isInSpotlightScreen && (g_CurrentGameState >= 2);
 
     if (MiniMapHideInVote && isInVotingScreen) {
-        isPlayingGame = false;
+        isPlaying = false;
     }
 
-    bool shouldShowMap = MiniMapEnabled && isPlayingGame;
+    bool shouldShowMap = MiniMapEnabled && isPlaying;
 
-    // Paneli aç/kapat emrini doğrudan gönder
-    env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapVisibleMethod, (jboolean)shouldShowMap);
+    if (shouldShowMap != s_LastMiniMapState) {
+        s_LastMiniMapState = shouldShowMap;
+        env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapVisibleMethod, (jboolean)shouldShowMap);
+    }
 
     if (!shouldShowMap) return;
 
-    // Harita ID'sini Java'ya ilet
-    if (g_SetMiniMapIdMethod) {
+    if (g_SetMiniMapIdMethod && g_CurrentMapId >= 0) {
         env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapIdMethod, (jint)g_CurrentMapId);
     }
 
     if (!g_UpdateMiniMapBatchMethod) return;
 
-    // 60 FPS'te 3 karede bir gönder (Hafif ve pürüzsüz)
     static int mapThrottle = 0;
-    if (++mapThrottle < 3) return;
+    if (++mapThrottle < 4) return;
     mapThrottle = 0;
 
     int offset = 0;
@@ -739,11 +742,11 @@ void SendMiniMapBatch(JNIEnv* env) {
         PlayerData* p = &g_RenderPlayers[i];
         if (!p->isValid) continue;
 
-        int pColor = GetPlayerExactColor(p->instance);
+        int colorId = GetPlayerColorId(p->instance);
 
-        char safeName[32];
+        char safeName[48];
         int j = 0;
-        for (int k = 0; p->name[k] && j < 30; k++) {
+        for (int k = 0; p->name[k] && j < 46; k++) {
             if (p->name[k] == ',' || p->name[k] == ';') safeName[j++] = ' ';
             else safeName[j++] = p->name[k];
         }
@@ -752,19 +755,21 @@ void SendMiniMapBatch(JNIEnv* env) {
         bool isDeadPlayer = p->isGhost || p->isDowned;
         Vector2 targetCoord = p->position;
 
-        // Ölü oyuncu için KilledLocation geçerliyse onu kullan, değilse son bilinen pozisyonu
+        // ÖLÜ OYUNCU HİZALAMA:
+        // Eğer killedLocation geçerliyse öldüğü odaya sabitler.
+        // Eğer henüz yazılmadıysa son bilinen pozisyonu kullanır, asla es geçmez (continue yapılmaz).
         if (isDeadPlayer) {
-            if (p->killedLocation.x != 0.0f || p->killedLocation.y != 0.0f) {
+            if (p->hasKilledLoc) {
                 targetCoord = p->killedLocation;
             }
         }
 
         offset += snprintf(g_MiniMapBatchBuffer + offset, sizeof(g_MiniMapBatchBuffer) - offset,
-                           "%.2f,%.2f,%d,%d,%d,%s;",
+                           "%.1f,%.1f,%d,%d,%d,%s;",
                            targetCoord.x, targetCoord.y,
                            isDeadPlayer ? 1 : 0,
                            p->isLocal ? 1 : 0,
-                           pColor, safeName);
+                           colorId, safeName);
         if (offset >= sizeof(g_MiniMapBatchBuffer) - 100) break;
     }
 
@@ -875,7 +880,7 @@ void ExecuteRepairSabotage() {
             void* taskIdStr = il2cpp_string_new_func(taskId);
             if (taskIdStr) {
                 TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-                LOGI("Sabotage repaired safely: %s", taskId);
+                LOGI("Sabotage repaired: %s", taskId);
             }
         }
     }
@@ -901,7 +906,7 @@ void ExecuteCompleteSingleTask() {
             void* taskIdStr = il2cpp_string_new_func(taskId);
             if (taskIdStr) {
                 TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-                LOGI("Single task completed safely: %s", taskId);
+                LOGI("Single task completed: %s", taskId);
                 if (TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
                 break;
             }
@@ -909,29 +914,53 @@ void ExecuteCompleteSingleTask() {
     }
 }
 
+// 1.2s gecikmeli ve thread-safe sabotaj açma
 void ExecuteUnlockSabotages() {
     if (!g_TasksHandler || !TasksHandler_CompleteTask || !il2cpp_string_new_func) return;
+
     void* taskList = *(void**)((uintptr_t)g_TasksHandler + OFFSET_TH_SORTEDASSIGNEDTASKS);
     if (!taskList) return;
     void* items = *(void**)((uintptr_t)taskList + 0x10);
     int count = *(int*)((uintptr_t)taskList + 0x18);
     if (!items || count <= 0) return;
 
+    std::vector<std::string> impostorTaskIds;
     for (int i = 0; i < count; i++) {
         void* task = *(void**)((uintptr_t)items + 0x20 + (i * 8));
         if (!task) continue;
+
         bool isImpostor = *(bool*)((uintptr_t)task + OFFSET_GT_ISIMPOSTORTASK);
-        if (isImpostor) {
-            char taskId[64]; GetTaskId(task, taskId, sizeof(taskId));
-            if (taskId[0] == '\0') continue;
-            void* taskIdStr = il2cpp_string_new_func(taskId);
-            if (taskIdStr) {
-                TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
-                LOGI("Sabotage impostor task completed: %s", taskId);
+        bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
+
+        // Yalnızca sabotaj kilidini açan görevler
+        if (isImpostor && !isFake) {
+            char taskId[64];
+            GetTaskId(task, taskId, sizeof(taskId));
+            if (taskId[0] != '\0') {
+                impostorTaskIds.push_back(std::string(taskId));
             }
         }
     }
-    if (TasksHandler_UpdateTaskVisuals) TasksHandler_UpdateTaskVisuals(g_TasksHandler);
+
+    if (impostorTaskIds.empty()) return;
+
+    std::thread([impostorTaskIds]() {
+        for (const auto& taskId : impostorTaskIds) {
+            if (!isInGame || isInLobby || !g_TasksHandler) break;
+
+            void* taskIdStr = il2cpp_string_new_func(taskId.c_str());
+            if (taskIdStr) {
+                TasksHandler_CompleteTask(g_TasksHandler, taskIdStr, false, false, false, false);
+                LOGI("Impostor sabotage task completed (with 1.2s delay): %s", taskId.c_str());
+            }
+
+            if (TasksHandler_UpdateTaskVisuals && g_TasksHandler) {
+                TasksHandler_UpdateTaskVisuals(g_TasksHandler);
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+        }
+    }).detach();
 }
 
 void HandleTasksAndSabotageLogic() {
@@ -1036,18 +1065,26 @@ void CollectPlayerDataFromInstance(void* instance, PlayerData* p, Vector2 camPos
     bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
     p->position = GetPlayerPosition(instance, isLocal);
 
-    p->killedLocation = {0.0f, 0.0f};
     p->isGhost = *(bool*)((uintptr_t)instance + OFFSET_PE_ISGHOST);
     p->isDowned = *(bool*)((uintptr_t)instance + OFFSET_PE_ISDOWNED);
 
+    p->hasKilledLoc = false;
     if (p->isGhost || p->isDowned) {
-        p->killedLocation = *(Vector2*)((uintptr_t)instance + OFFSET_PE_KILLEDLOCATION);
+        Vector2 kLoc = *(Vector2*)((uintptr_t)instance + OFFSET_PE_KILLEDLOCATION);
+        if (kLoc.x != 0.0f || kLoc.y != 0.0f) {
+            p->killedLocation = kLoc;
+            p->hasKilledLoc = true;
+        }
     }
 
     p->isLocal = isLocal;
     p->role = GetRoleType(instance);
     p->teamId = *(int*)((uintptr_t)instance + OFFSET_PE_TEAMID);
     p->entityNumber = *(int*)((uintptr_t)instance + OFFSET_PE_ENTITYNUMBER);
+
+    void* cosm = *(void**)((uintptr_t)instance + OFFSET_PE_COSMETICS);
+    p->cosmColorVal = cosm ? *(int*)((uintptr_t)cosm + 0x10) : -999;
+
     GetPlayerNickname(instance, p->name, sizeof(p->name));
     p->inVent = *(bool*)((uintptr_t)instance + OFFSET_PE_INVENT);
     p->isInvisible = *(bool*)((uintptr_t)instance + OFFSET_PE_ISINVISIBLE);
@@ -1116,6 +1153,9 @@ void RenderDebugPanelBatch() {
     snprintf(buf, sizeof(buf), "GM:%c | State:%s(%d) | InGame:%c | Lobby:%c | Vote:%c | Players:%d | Dead:%d", g_GameManager ? 'Y' : 'N', GetGameStateName(g_CurrentGameState), g_CurrentGameState, isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', isInVotingScreen ? 'Y' : 'N', g_RenderPlayerCount, g_DeadPlayersCount);
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
+    snprintf(buf, sizeof(buf), "MapManager:%c | MapID:%d | RoomMap:%s", g_MapManager ? 'Y' : 'N', g_CurrentMapId, g_CurrentMapName);
+    BatchAddText(centerX, startY, buf, COLOR_GOLD); startY += lineHeight;
+
     snprintf(buf, sizeof(buf), "NoClip:%c | AutoReady:%c", NoClip ? 'Y' : 'N', AutoReady ? 'Y' : 'N');
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
@@ -1146,7 +1186,8 @@ void RenderDebugPanelBatch() {
         if (p->isRunning) flags[fi++] = 'R'; if (p->hasKilledThisRound || p->confirmedKiller) flags[fi++] = 'K';
         if (p->isInfected) flags[fi++] = '*'; if (p->hasBomb) flags[fi++] = 'B';
         flags[fi] = '\0'; if (fi == 0) strcpy(flags, "-");
-        snprintf(buf, sizeof(buf), "#%02d %-12s %s(%d) T%d %.0fm Tsk:%d [%s]", p->entityNumber, p->name, ri.name, p->role, p->teamId, p->distanceToCamera, p->tasksRemaining, flags);
+
+        snprintf(buf, sizeof(buf), "#%02d %-10s %s(%d) T:%d Ent:%d Csm:%d [%s]", p->entityNumber, p->name, ri.name, p->role, p->teamId, p->entityNumber, p->cosmColorVal, flags);
         int color = p->isLocal ? COLOR_CYAN : (p->isGhost ? COLOR_GRAY : ri.color);
         BatchAddText(centerX, startY, buf, color); startY += lineHeight;
         if (p->killedBy[0] != '\0') {
@@ -1247,6 +1288,8 @@ void ClearAllESP() {
     g_LocalIsInfected = false; g_LocalHasBomb = false; g_RoofRemovedThisRound = false;
     g_CameraPosition = {0, 0, 0}; g_CinemachineCamera = nullptr; g_CameraPositionValid = false;
     s_LastMiniMapState = false;
+    g_CurrentMapId = -1;
+    strcpy(g_CurrentMapName, "None");
     ResetDroneViewDelay();
 
     JNIEnv* env = GetJNIEnv();
@@ -1267,6 +1310,8 @@ void RefreshPlayerDataAndRender() {
 
     Vector2 camPos = GetCameraPosition2D();
     g_LocalPlayerPos = localPlayerInstance ? GetPlayerPosition(localPlayerInstance, true) : g_LocalPlayerPos;
+
+    DetectCurrentMap();
 
     g_RenderPlayerCount = 0;
     for (int i = 0; i < g_PlayerInstanceCount && g_RenderPlayerCount < MAX_PLAYERS; i++) {
@@ -1332,7 +1377,7 @@ void Update(void *instance) {
             if (NoClip) ApplyNoClip(instance, true);
             if (btnCallEmergency && PlayerController_CallEmergency) { PlayerController_CallEmergency(instance); btnCallEmergency = false; LOGI("Emergency called"); }
 
-            // Oyunun kendi Unity ana döngüsünde güvenli teleport
+            // Güvenli Teleport (Main Loop)
             if (g_PendingDirectTP.load() && TeleportTo) {
                 Vector2 targetPos = {g_TargetDirectTPX.load(), g_TargetDirectTPY.load()};
                 TeleportTo(instance, targetPos, true);
@@ -1363,6 +1408,15 @@ void GameManager_Update(void* instance) {
         isInLobby = (g_CurrentGameState <= 1);
         isInGame = (g_CurrentGameState >= 2);
 
+        // Lobiye dönüldüğünde haritayı kesin olarak kapat
+        if (isInLobby && s_LastMiniMapState) {
+            s_LastMiniMapState = false;
+            JNIEnv* env = GetJNIEnv();
+            if (env && g_MenuClass && g_SetMiniMapVisibleMethod) {
+                env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapVisibleMethod, (jboolean)false);
+            }
+        }
+
         // 3 = Opening, 4 = Discussion, 5 = Voting, 6 = Waiting, 7 = Proceeding
         isInVotingScreen = (g_CurrentGameState >= 3 && g_CurrentGameState <= 7);
     }
@@ -1371,9 +1425,7 @@ void GameManager_Update(void* instance) {
 
 // PlayableEntity.LateUpdate - RVA: 0x3E509E8
 void (*old_LateUpdate)(void *instance);
-void LateUpdate(void *instance) {
-    old_LateUpdate(instance);
-}
+void LateUpdate(void *instance) { old_LateUpdate(instance); }
 
 // PlayableEntity.TurnIntoGhost - RVA: 0x3E5B99C
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
@@ -1417,12 +1469,22 @@ void hook_PlayerPropertiesManager_Initialize(void* instance) {
     old_PlayerPropertiesManager_Initialize(instance);
 }
 
+// MapManager.Internal_OnMapStart - RVA: 0x3831E54
+void (*old_Internal_OnMapStart)(void* instance) = NULL;
+void hook_Internal_OnMapStart(void* instance) {
+    if (instance) {
+        g_MapManager = instance;
+        DetectCurrentMap();
+    }
+    old_Internal_OnMapStart(instance);
+}
+
 // MapManager.Internal_OnMapLoad - RVA: 0x3831058
 void (*old_Internal_OnMapLoad)(void* instance) = NULL;
 void hook_Internal_OnMapLoad(void* instance) {
     if (instance) {
-        uint8_t mapVal = *(uint8_t*)((uintptr_t)instance + 0x2);
-        g_CurrentMapId = (int)mapVal;
+        g_MapManager = instance;
+        DetectCurrentMap();
     }
     old_Internal_OnMapLoad(instance);
 }
@@ -1473,6 +1535,13 @@ void (*old_LocalPlayer_StartRound)(void* instance, bool isFirstRound);
 void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
     g_RoofRemovedThisRound = false;
     if (RemoveRoof && g_RoofHandler && RoofHandler_DeactivateRoofs) { RoofHandler_DeactivateRoofs(g_RoofHandler, true); g_RoofRemovedThisRound = true; }
+
+    // Yeni tur başladı: Eski turun tüm ceset konumlarını sıfırla
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        g_RenderPlayers[i].hasKilledLoc = false;
+        g_RenderPlayers[i].killedLocation = {0.0f, 0.0f};
+    }
+
     old_LocalPlayer_StartRound(instance, isFirstRound);
 }
 
@@ -1527,7 +1596,7 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Category_[\uE31A]Mini Map"),
             OBFUSCATE("Toggle_[\uE31A]Show Mini Map"),
             OBFUSCATE("Toggle_True_[\uE6F6]Show Map Players"),
-            OBFUSCATE("Toggle_True_[\uE62A]Show Map Dead Bodies"),
+            OBFUSCATE("Toggle_True_[\uE442]Show Map Dead Bodies"),
             OBFUSCATE("Toggle_True_[\uE2DE]Touch Teleport (Map)"),
             OBFUSCATE("Toggle_True_[\uE224]Hide Map in Vote Screen"),
 
@@ -1658,6 +1727,9 @@ void hack_thread() {
 
     // PlayerPropertiesManager.GetUserProperties - RVA: 0x3AC5A98
     PlayerPropertiesManager_GetUserProperties = (void* (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AC5A98")));
+
+    // MapManager.Internal_OnMapStart - RVA: 0x3831E54
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3831E54")), hook_Internal_OnMapStart, old_Internal_OnMapStart);
 
     // MapManager.Internal_OnMapLoad - RVA: 0x3831058
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3831058")), hook_Internal_OnMapLoad, old_Internal_OnMapLoad);
