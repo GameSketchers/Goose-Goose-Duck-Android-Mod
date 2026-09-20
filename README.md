@@ -24,12 +24,15 @@
 
 | Category | Features |
 |:--------:|:---------|
-| 👁️ **Vision** | `Unlimited Vision (Fog Hack)` `See Ghosts` `Remove Roof` `Drone View (5-25x Zoom)` |
-| 🎯 **ESP** | `Player ESP` `Lines` `Box` `Distance` `Names` `Edge Indicators` `Hide in Vote/Lobby` |
-| ⚡ **Utility** | `No Vent Cooldown` `Auto Complete Tasks` `Remote Call Emergency` |
-| 🚀 **Movement** | `Set Position` `Teleport to Saved` `Teleport to Coordinates` `Speed Hack` |
-| 🛠️ **Debug** | `Debug Overlay` `Player Info` `Position Tracking` `Entity Dump` |
-| 🧪 **Experimental** | `Anti-Death (Local)` |
+| 👁️ **Vision & Cooldown** | `Unlimited Vision (Fog Hack)` `Remove Roof` `No Vent Cooldown` `See Ghosts` |
+| 🚀 **Movement** | `No Clip (Walk Through Walls)` `Drone View (5x-40x Zoom)` `Speed Boost` |
+| 🎯 **ESP Settings** | `Player ESP` `Lines` `Box` `Distance` `Names` `Edge Indicators` `Hide in Vote/Lobby` |
+| 🗺️ **Mini Map** | `Interactive Overlay` `Show Players` `Show Dead Bodies` `Touch Teleport` `Hide in Vote` |
+| 🎙️ **Voice** | `Hear Dead Voice` `Hear Far Players (Outside Meeting)` |
+| 💣 **Sabotage & Tasks** | `Unlock Sabotages (1.2s Safe)` `Auto Repair Sabotage` `Repair Sabotage Now` `Auto Tasks` `Complete 1 Task` |
+| ⚡ **Miscellaneous** | `Call Emergency from Anywhere` `Auto Ready (Lobby)` |
+| 🛠️ **Debug** | `Live Diagnostics Overlay` `Real-Time Player Color/Entity Dump` `Map ID & Room Tracking` |
+| 🧪 **Experimental** | `Anti-Death (Local)` `Custom Speed Multiplier` |
 
 ---
 
@@ -43,12 +46,23 @@
 | 🟢 **Green** | Neutral Killers (Pelican, Vulture) |
 | 🟠 **Orange** | Neutrals (Pigeon, Falcon) |
 | 🟡 **Yellow** | Dodo / Dueling Dodo |
-| ⚫ **Gray** | Ghosts / Dead Players |
+| ⚫ **Gray** | Ghosts / Spectators |
 
 **Special Indicators:**
 - 🦠 **Bio Icon:** Player is Infected
 - 💣 **Bomb Icon:** Player has a Bomb
-- **Flags:** `[K]` Killed this round, `[V]` In Vent, `[I]` Invisible, `[M]` Morphed
+- 🔪 **Kill Icon:** Confirmed Killer this round
+- **Flags:** `[L]` Local, `[G]` Ghost, `[D]` Downed, `[V]` In Vent, `[I]` Invisible, `[P]` Pelican, `[S]` Spectator, `[M]` Morphed, `[R]` Running, `[K]` Kill
+
+---
+
+## 🗺️ Interactive Mini-Map & Live Teleport
+
+- **Smart Auto-Detection:** Automatically loads the correct map layout based on the active game room.
+- **Player & Body Radar:** Alive players and dead bodies are rendered with their exact matching plumage/body colors.
+- **Dead Body Pinning:** Corpses stay fixed at their exact kill locations and automatically reset when a new round starts.
+- **Live Touch Teleport:** Simply tap or drag across the on-screen mini-map to seamlessly teleport without game engine crashes.
+- **HUD Controls:** Movable bottom drag bar and bottom-left resize handle (`U+E0A6`). Automatically hides during meetings and lobbies.
 
 ---
 
@@ -63,8 +77,8 @@ Want to update offsets for a new game patch? Check out our automated Python tool
 ## 📥 Installation
 
 1. Go to [**Releases**](https://github.com/GameSketchers/Goose-Goose-Duck-Android-Mod/releases)
-2. Download latest **APK**
-3. Install & Play! (Grant Overlay permissions if asked)
+2. Download the latest **APK**
+3. Install & Play! (Grant Overlay permissions if prompted)
 
 ---
 
@@ -72,7 +86,7 @@ Want to update offsets for a new game patch? Check out our automated Python tool
 
 > **This project is made for EDUCATIONAL PURPOSES ONLY.**
 > 
-> Using mods in online games may result in bans.
+> Using mods in online games may result in account bans.
 > We are not responsible for any consequences.
 
 ---
@@ -81,6 +95,6 @@ Want to update offsets for a new game patch? Check out our automated Python tool
 
 ![Footer](https://capsule-render.vercel.app/api?type=waving&color=0:A99FD3,50:D4A5C9,100:16141F&height=100&section=footer)
 
-**Made with 💜 by [anonimbiri](https://github.com/anonimbiri-IsBack)**
+**Made with 💜 by [anonimbiri](https://github.com/anonimbiri-IsBack) & Google Gemini**
 
 </div>
