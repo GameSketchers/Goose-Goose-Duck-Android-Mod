@@ -60,6 +60,11 @@ public class MiniMapView extends View {
             "cream"        // 19
     };
 
+    // Varsayılan harita görünümü boyutu (dp). Overlay 150dp - 8dp padding = 142dp
+    private static final float BASE_SIZE_DP = 142f;
+    private static final float MIN_ICON_SCALE = 0.7f;
+    private static final float MAX_ICON_SCALE = 3.5f;
+
     private volatile Bitmap mapBitmap = null;
     private final Map<Integer, Bitmap> aliveIcons = new HashMap<>();
     private final Map<Integer, Bitmap> deadIcons = new HashMap<>();
@@ -83,6 +88,7 @@ public class MiniMapView extends View {
     private float worldMaxY = 22.0f;
 
     private final RectF renderMapRect = new RectF();
+    private final RectF iconRect = new RectF();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private long lastTeleportTime = 0;
 
@@ -250,13 +256,13 @@ public class MiniMapView extends View {
                 worldMinY = -34.6f; worldMaxY = 34.6f;
                 break;
 
-            // ID 10: Eagleton Springs (1024x1024 - 1:1 Kare)
+            // ID 10: Eagleton Springs (1024x1024 - 1:1)
             case "eagleton_springs_mini_map":
                 worldMinX = -42.0f; worldMaxX = 42.0f;
                 worldMinY = -42.0f; worldMaxY = 42.0f;
                 break;
 
-            // Eagleton Springs Sewers (1024x1024 - 1:1 Kare)
+            // Eagleton Springs Sewers (1024x1024 - 1:1)
             case "eagleton_springs_sewers_mini_map":
                 worldMinX = -32.0f; worldMaxX = 32.0f;
                 worldMinY = -32.0f; worldMaxY = 32.0f;
@@ -297,13 +303,21 @@ public class MiniMapView extends View {
 
         canvas.drawRect(0, 0, w, h, bgPaint);
 
+        // Harita boyutuna göre ikon ölçeği (varsayılan boyutta 1.0)
+        float density = getResources().getDisplayMetrics().density;
+        float scale = Math.min(w, h) / (BASE_SIZE_DP * density);
+        scale = Math.max(MIN_ICON_SCALE, Math.min(MAX_ICON_SCALE, scale));
+
+        localRingPaint.setStrokeWidth(3.5f * scale);
+        textPaint.setTextSize(20f * scale);
+
         Bitmap curBmp = mapBitmap;
         if (curBmp != null && !curBmp.isRecycled()) {
             float bmpW = curBmp.getWidth();
             float bmpH = curBmp.getHeight();
-            float scale = Math.min((float) w / bmpW, (float) h / bmpH);
-            float drawW = bmpW * scale;
-            float drawH = bmpH * scale;
+            float fit = Math.min((float) w / bmpW, (float) h / bmpH);
+            float drawW = bmpW * fit;
+            float drawH = bmpH * fit;
             float left = (w - drawW) * 0.5f;
             float top = (h - drawH) * 0.5f;
 
@@ -325,30 +339,33 @@ public class MiniMapView extends View {
                 float mapX = renderMapRect.left + (normX * renderMapRect.width());
                 float mapY = renderMapRect.top + (normY * renderMapRect.height());
 
-                if (mapX < renderMapRect.left + 4) mapX = renderMapRect.left + 4;
-                if (mapX > renderMapRect.right - 4) mapX = renderMapRect.right - 4;
-                if (mapY < renderMapRect.top + 4) mapY = renderMapRect.top + 4;
-                if (mapY > renderMapRect.bottom - 4) mapY = renderMapRect.bottom - 4;
+                float margin = 4f * scale;
+                if (mapX < renderMapRect.left + margin) mapX = renderMapRect.left + margin;
+                if (mapX > renderMapRect.right - margin) mapX = renderMapRect.right - margin;
+                if (mapY < renderMapRect.top + margin) mapY = renderMapRect.top + margin;
+                if (mapY > renderMapRect.bottom - margin) mapY = renderMapRect.bottom - margin;
 
                 if (ent.isDead) {
                     Bitmap icon = deadIcons.get(ent.colorId);
                     if (icon != null) {
-                        float iconSize = 22f;
-                        RectF dst = new RectF(mapX - iconSize * 0.5f, mapY - iconSize * 0.5f, mapX + iconSize * 0.5f, mapY + iconSize * 0.5f);
-                        canvas.drawBitmap(icon, null, dst, bitmapPaint);
+                        float iconSize = 22f * scale;
+                        iconRect.set(mapX - iconSize * 0.5f, mapY - iconSize * 0.5f,
+                                mapX + iconSize * 0.5f, mapY + iconSize * 0.5f);
+                        canvas.drawBitmap(icon, null, iconRect, bitmapPaint);
                     }
                 } else {
                     Bitmap icon = aliveIcons.get(ent.colorId);
                     if (icon != null) {
-                        float iconW = 14f;
-                        float iconH = 26f;
-                        RectF dst = new RectF(mapX - iconW * 0.5f, mapY - iconH * 0.5f, mapX + iconW * 0.5f, mapY + iconH * 0.5f);
-                        canvas.drawBitmap(icon, null, dst, bitmapPaint);
+                        float iconW = 14f * scale;
+                        float iconH = 26f * scale;
+                        iconRect.set(mapX - iconW * 0.5f, mapY - iconH * 0.5f,
+                                mapX + iconW * 0.5f, mapY + iconH * 0.5f);
+                        canvas.drawBitmap(icon, null, iconRect, bitmapPaint);
                     }
                 }
 
                 if (ent.isLocal) {
-                    canvas.drawCircle(mapX, mapY, 14f, localRingPaint);
+                    canvas.drawCircle(mapX, mapY, 14f * scale, localRingPaint);
                 }
             }
         }

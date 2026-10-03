@@ -11,7 +11,7 @@ class C:
     RESET   = "\033[0m"
     BOLD    = "\033[1m"
     DIM     = "\033[2m"
-    
+
     RED     = "\033[91m"
     GREEN   = "\033[92m"
     YELLOW  = "\033[93m"
@@ -36,7 +36,6 @@ FIELD_TARGETS = {
         "OFFSET_PE_HASKILLED": [r"\bbool\s+hasKilledThisRound\b", r"\bbool\s+hasKilled\b"],
         "OFFSET_PE_TEAMID": [r"\bint\s+teamId\b"],
         "OFFSET_PE_FOGOFWAR": [r"\bbool\s+fogOfWarEnabled\b", r"\bbool\s+fogOfWar\b"],
-        "OFFSET_PE_KILLEDLOCATION": [r"\bVector2\s+killedLocation\b"],
         "OFFSET_PE_ISRUNNING": [r"\bbool\s+isRunning\b"],
         "OFFSET_PE_ISGHOST": [r"\bbool\s+isGhost\b"],
         "OFFSET_PE_ISINFECTED": [r"\bbool\s+isInfected\b"],
@@ -97,11 +96,15 @@ FIELD_TARGETS = {
         "OFFSET_WCCH_INWALL": [r"\bbool\s+inWall\b"]
     },
     "GameManager": {
-        "OFFSET_GM_GAMESTATE": [r"\bGameManager\.GameState\s+gameState\b", r"\bGameState\s+gameState\b"]
+        "OFFSET_GM_GAMESTATE": [r"\bGameManager\.GameState\s+gameState\b", r"\bGameState\s+gameState\b"],
+        "OFFSET_GM_DEADBODIES": [r"\bList<GameManager\.Body>\s+deadBodies\b"]
     }
 }
 
 METHOD_TARGETS = {
+    ("MainManager", "Update"): r"void\s+Update\s*\(",
+    ("MainManager", "GetCurrentMap"): r"EMap\s+GetCurrentMap\s*\(",
+
     ("PlayableEntity", "Update"): r"void\s+Update\s*\(",
     ("PlayableEntity", "LateUpdate"): r"void\s+LateUpdate\s*\(",
     ("PlayableEntity", "TurnIntoGhost"): r"void\s+TurnIntoGhost\s*\(",
@@ -134,6 +137,17 @@ METHOD_TARGETS = {
     ("PlayerPropertiesManager", "Initialize"): r"void\s+Initialize\s*\(",
     ("PlayerPropertiesManager", "ChangeReadyState"): r"void\s+ChangeReadyState\s*\(",
     ("PlayerPropertiesManager", "GetUserProperties"): r"PlayerProperties\s+GetUserProperties\s*\(",
+
+    ("UnlockablesManager", "UnlockableIsOwned"): r"bool\s+UnlockableIsOwned\s*\(",
+    ("UnlockablesManager", "UnlockableIsFreeOrAchievement"): r"bool\s+UnlockableIsFreeOrAchievement\s*\(",
+
+    ("PlayerCustomizationPanelHandler", "IsCustomizeUnlockableValid"): r"bool\s+IsCustomizeUnlockableValid\s*\(",
+    ("PlayerCustomizationPanelHandler", "IsOwnedOrFree"): r"bool\s+IsOwnedOrFree\s*\(",
+    ("PlayerCustomizationPanelHandler", "IsUnlockableLocked"): r"bool\s+IsUnlockableLocked\s*\(",
+    ("PlayerCustomizationPanelHandler", "IsBuyable"): r"bool\s+IsBuyable\s*\(",
+    ("PlayerCustomizationPanelHandler", "ChangeCosmetic"): r"void\s+ChangeCosmetic\s*\(",
+    ("PlayerCustomizationPanelHandler", "SpawnRecipes"): r"void\s+SpawnRecipes\s*\(",
+    ("PlayerCustomizationPanelHandler", "ApplyChanges"): r"void\s+ApplyChanges\s*\(",
 
     ("MapManager", "Internal_OnMapStart"): r"void\s+Internal_OnMapStart\s*\(",
     ("MapManager", "Internal_OnMapLoad"): r"void\s+Internal_OnMapLoad\s*\(",
@@ -229,7 +243,7 @@ def parse_dump(dump_path):
 
 def update_cpp(cpp_path, typedefs, fields, methods):
     print(f"\n{C.CYAN}[*]{C.RESET} Updating C++ Source File: {C.BOLD}'{cpp_path}'{C.RESET}...")
-    
+
     with open(cpp_path, "r", encoding="utf-8") as f:
         content = f.read()
 

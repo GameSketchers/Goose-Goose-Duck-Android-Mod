@@ -31,6 +31,8 @@ public class MiniMapOverlay {
     private volatile boolean isAttached = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
+    private static final int BAR_HEIGHT = 18; // alt sürükleme çubuğu (dp)
+
     private int currentWidth = 150;
     private int currentHeight = 150;
     private static final int MIN_SIZE = 110;
@@ -73,7 +75,7 @@ public class MiniMapOverlay {
                 RelativeLayout.LayoutParams.MATCH_PARENT,
                 RelativeLayout.LayoutParams.MATCH_PARENT
         );
-        mapParams.setMargins(0, 0, 0, dp(18));
+        mapParams.setMargins(0, 0, 0, dp(BAR_HEIGHT));
         miniMapView.setLayoutParams(mapParams);
 
         GradientDrawable mapClip = new GradientDrawable();
@@ -85,9 +87,10 @@ public class MiniMapOverlay {
         }
         rootLayout.addView(miniMapView);
 
+        // Alt sürükleme çubuğu (taşıma)
         FrameLayout dragBar = new FrameLayout(context);
         RelativeLayout.LayoutParams barParams = new RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.MATCH_PARENT, dp(18)
+                RelativeLayout.LayoutParams.MATCH_PARENT, dp(BAR_HEIGHT)
         );
         barParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
         dragBar.setLayoutParams(barParams);
@@ -106,17 +109,25 @@ public class MiniMapOverlay {
         dragBar.setOnTouchListener(createMoveListener());
         rootLayout.addView(dragBar);
 
+        // Büyütme ikonu: SOL kenar + haritanın dikey ORTASI
         TextView resizeHandle = new TextView(context);
         resizeHandle.setText("\uE0A6");
-        resizeHandle.setTextColor(Color.parseColor("#B8B5C8"));
+        resizeHandle.setTextColor(Color.WHITE);
         resizeHandle.setTextSize(14f);
         try {
             resizeHandle.setTypeface(Typeface.createFromAsset(context.getAssets(), "fonts/Phosphor-Bold.ttf"));
         } catch (Exception ignored) {}
 
-        RelativeLayout.LayoutParams resizeParams = new RelativeLayout.LayoutParams(dp(24), dp(24));
-        resizeParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        GradientDrawable handleBg = new GradientDrawable();
+        handleBg.setColor(Color.parseColor("#99000000"));
+        handleBg.setCornerRadius(dp(8));
+        resizeHandle.setBackground(handleBg);
+
+        RelativeLayout.LayoutParams resizeParams = new RelativeLayout.LayoutParams(dp(26), dp(26));
         resizeParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+        resizeParams.addRule(RelativeLayout.CENTER_VERTICAL);
+        // Alt çubuk (18dp) hariç tutularak harita alanının gerçek ortasına denk gelir
+        resizeParams.bottomMargin = dp(BAR_HEIGHT);
         resizeHandle.setLayoutParams(resizeParams);
         resizeHandle.setGravity(Gravity.CENTER);
         resizeHandle.setOnTouchListener(createResizeListener());
@@ -150,23 +161,22 @@ public class MiniMapOverlay {
 
     private View.OnTouchListener createResizeListener() {
         return new View.OnTouchListener() {
-            private int initialW, initialH;
-            private float initialTouchX, initialTouchY;
+            private int initialW;
+            private float initialTouchX;
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                         initialW = params.width;
-                        initialH = params.height;
                         initialTouchX = event.getRawX();
-                        initialTouchY = event.getRawY();
                         return true;
                     case MotionEvent.ACTION_MOVE:
-                        int delta = (int) ((initialTouchX - event.getRawX()) + (event.getRawY() - initialTouchY)) / 2;
+                        // Sola çek = büyüt, sağa çek = küçült
+                        int delta = (int) (initialTouchX - event.getRawX());
                         int newSize = Math.max(dp(MIN_SIZE), Math.min(dp(MAX_SIZE), initialW + delta));
                         params.width = newSize;
-                        params.height = newSize + dp(18);
+                        params.height = newSize + dp(BAR_HEIGHT);
                         if (isAttached) windowManager.updateViewLayout(rootLayout, params);
                         return true;
                 }

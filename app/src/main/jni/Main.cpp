@@ -52,6 +52,7 @@ bool HearDeadVoice = false;
 bool HearFarPlayers = false;
 
 // Hareket & Diğer
+bool UnlockAllSkins = true;
 bool AutoReady = false;
 bool AntiDeath = false;
 bool UnlimitedVision = false;
@@ -65,7 +66,7 @@ float SpeedMultiplier = 1.5f;
 
 bool btnCallEmergency = false;
 
-// Thread-safe teleport kuyruğu (Crash engelleme)
+// Thread-safe teleport kuyruğu
 std::atomic<bool> g_PendingDirectTP(false);
 std::atomic<float> g_TargetDirectTPX(0.0f);
 std::atomic<float> g_TargetDirectTPY(0.0f);
@@ -74,6 +75,7 @@ void* g_TasksHandler = NULL;
 void* g_RoofHandler = NULL;
 void* g_GameManager = NULL;
 void* g_PlayerPropertiesManager = NULL;
+void* g_MainManager = NULL;
 void* g_MapManager = NULL;
 bool g_RoofRemovedThisRound = false;
 
@@ -117,7 +119,7 @@ struct Quaternion { float x, y, z, w; };
 #define COLOR_LIME     0xFF32CD32
 #define COLOR_GOLD     0xFFFFD700
 
-// PlayableEntity (TypeDefIndex: 6395)
+// PlayableEntity (TypeDefIndex: 6406)
 #define OFFSET_PE_ENTITYNUMBER       0x88
 #define OFFSET_PE_NICKNAME           0x90
 #define OFFSET_PE_ISLOCAL            0x98
@@ -148,13 +150,13 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_PE_CONFINECOLLIDER    0x2F8
 #define OFFSET_PE_STATIC_DEADPLAYERSCOUNT  0x4
 
-// MapManager (TypeDefIndex: 1288)
+// MapManager (TypeDefIndex: 1294)
 #define OFFSET_MM_ROOMMAP            0x180
 
-// PlayerController (TypeDefIndex: 6407)
+// PlayerController (TypeDefIndex: 6418)
 #define OFFSET_PC_READYSTATE         0x388
 
-// LocalPlayer (TypeDefIndex: 6370)
+// LocalPlayer (TypeDefIndex: 6381)
 #define OFFSET_LP_MAINCAMERA              0x78
 #define OFFSET_LP_STATECAMERA             0x80
 #define OFFSET_LP_SCRIPTABLESTATE         0x88
@@ -164,33 +166,34 @@ struct Quaternion { float x, y, z, w; };
 #define OFFSET_LP_INGAMEENDSPOTLIGHT      0xC6
 #define OFFSET_LP_CANSEEGHOSTS            0x150
 
-// GameManager (TypeDefIndex: 22788)
+// GameManager (TypeDefIndex: 22799)
 #define OFFSET_GM_GAMESTATE               0x148
+#define OFFSET_GM_DEADBODIES              0x158
 
-// BetterPhotonTransformView (TypeDefIndex: 2016)
+// BetterPhotonTransformView (TypeDefIndex: 2024)
 #define OFFSET_TV_LATESTPOS          0x30
 #define OFFSET_TV_LASTTRANSFORMPOS   0x38
 
-// CinemachineStateDrivenCamera (TypeDefIndex: 20534)
+// CinemachineStateDrivenCamera (TypeDefIndex: 20545)
 #define OFFSET_CSDC_STATE            0x108
 #define OFFSET_CS_RAWPOSITION        0x4C
 
-// GGDRole (TypeDefIndex: 5744)
+// GGDRole (TypeDefIndex: 5752)
 #define OFFSET_ROLE_TYPE             0x10
 
-// TasksHandler (TypeDefIndex: 6344)
+// TasksHandler (TypeDefIndex: 6355)
 #define OFFSET_TH_SORTEDASSIGNEDTASKS  0x38
 
-// GameTask (TypeDefIndex: 5656)
+// GameTask (TypeDefIndex: 5664)
 #define OFFSET_GT_TASKID             0x10
 #define OFFSET_GT_ISSABOTAGE         0x53
 #define OFFSET_GT_ISIMPOSTORTASK     0x80
 #define OFFSET_GT_ISFAKETASK         0xD1
 
-// WallCollisionCheckHandler (TypeDefIndex: 1106)
+// WallCollisionCheckHandler (TypeDefIndex: 1112)
 #define OFFSET_WCCH_INWALL           0x20
 
-// PlayerProperties (TypeDefIndex: 1537)
+// PlayerProperties (TypeDefIndex: 1546)
 #define OFFSET_PP_READYSTATE         0x14
 
 struct PlayerInfo {
@@ -313,44 +316,134 @@ jmethodID g_SetMapTouchTeleportMethod = NULL;
 
 bool g_ESPReady = false;
 
-// LocalPlayer.OverrideOrthographicSize - RVA: 0x3E455BC
+// LocalPlayer.OverrideOrthographicSize - RVA: 0x3E559D4
 void (*OverrideOrthographicSize)(void*, float) = NULL;
 
-// PlayableEntity.TeleportTo - RVA: 0x3E61054
+// PlayableEntity.TeleportTo - RVA: 0x3E71684
 void (*TeleportTo)(void*, Vector2, bool) = NULL;
 
-// LocalPlayer.SetCanSeeGhosts - RVA: 0x3E4CF04
+// LocalPlayer.SetCanSeeGhosts - RVA: 0x3E5D31C
 void (*SetCanSeeGhosts)(void*, bool) = NULL;
 
-// TasksHandler.CompleteTask - RVA: 0x3E2D680
+// TasksHandler.CompleteTask - RVA: 0x3E3D8C0
 void (*TasksHandler_CompleteTask)(void*, void*, bool, bool, bool, bool) = NULL;
 
-// TasksHandler.UpdateTaskVisuals - RVA: 0x3E2EDEC
+// TasksHandler.UpdateTaskVisuals - RVA: 0x3E3F02C
 void (*TasksHandler_UpdateTaskVisuals)(void*) = NULL;
 
-// RoofHandler.DeactivateRoofs - RVA: 0x3DBF188
+// RoofHandler.DeactivateRoofs - RVA: 0x3DCF26C
 void (*RoofHandler_DeactivateRoofs)(void*, bool) = NULL;
 
-// PlayerController.CallEmergency - RVA: 0x3E72C18
+// PlayerController.CallEmergency - RVA: 0x3E83250
 void (*PlayerController_CallEmergency)(void*) = NULL;
 
-// Collider2D.set_isTrigger - RVA: 0x754CABC
+// Collider2D.set_isTrigger - RVA: 0x75632FC
 void (*Collider2D_set_isTrigger)(void*, bool) = NULL;
 
-// GameManager.IsInGame - RVA: 0x3ADC5B4
+// GameManager.IsInGame - RVA: 0x3AEABD8
 bool (*GameManager_IsInGame)(void*) = NULL;
 
-// GameManager.IsInLobby - RVA: 0x3ADC5C4
+// GameManager.IsInLobby - RVA: 0x3AEABE8
 bool (*GameManager_IsInLobby)(void*) = NULL;
 
-// GameManager.IsInMeeting - RVA: 0x3ADC5D4
+// GameManager.IsInMeeting - RVA: 0x3AEABF8
 bool (*GameManager_IsInMeeting)(void*) = NULL;
 
-// PlayerPropertiesManager.ChangeReadyState - RVA: 0x3AC4978
+// PlayerPropertiesManager.ChangeReadyState - RVA: 0x3AD2F9C
 void (*PlayerPropertiesManager_ChangeReadyState)(void*, int) = NULL;
 
-// PlayerPropertiesManager.GetUserProperties - RVA: 0x3AC5A98
+// PlayerPropertiesManager.GetUserProperties - RVA: 0x3AD40BC
 void* (*PlayerPropertiesManager_GetUserProperties)(void*) = NULL;
+
+// MainManager.GetCurrentMap - RVA: 0x3ABD7A4
+uint8_t (*MainManager_GetCurrentMap)(void* instance) = NULL;
+
+// --- GÜNCEL VE KUSURSUZ ÇALIŞAN SKIN UNLOCK HOOKLARI ---
+
+// MainManager.Update - RVA: 0x3ABBE70
+void (*old_MainManager_Update)(void* instance) = NULL;
+void hook_MainManager_Update(void* instance) {
+    if (instance) {
+        g_MainManager = instance;
+        if (UnlockAllSkins) {
+            *(bool*)((uintptr_t)instance + 0x8D) = true; // disableSpriteHashCheck = true
+        }
+    }
+    if (old_MainManager_Update) {
+        old_MainManager_Update(instance);
+    }
+}
+
+// UnlockablesManager.UnlockableIsOwned - RVA: 0x3ADB0EC
+bool (*old_UnlockableIsOwned)(void* unlockable) = NULL;
+bool hook_UnlockableIsOwned(void* unlockable) {
+    if (UnlockAllSkins) return true;
+    return old_UnlockableIsOwned ? old_UnlockableIsOwned(unlockable) : false;
+}
+
+// UnlockablesManager.UnlockableIsFreeOrAchievement - RVA: 0x3ADAC8C
+bool (*old_UnlockableIsFreeOrAchievement)(void* unlockable) = NULL;
+bool hook_UnlockableIsFreeOrAchievement(void* unlockable) {
+    if (UnlockAllSkins) return true;
+    return old_UnlockableIsFreeOrAchievement ? old_UnlockableIsFreeOrAchievement(unlockable) : false;
+}
+
+// PlayerCustomizationPanelHandler.IsCustomizeUnlockableValid - RVA: 0x3EBD440
+bool (*old_IsCustomizeUnlockableValid)(void* instance, void* unlockable) = NULL;
+bool hook_IsCustomizeUnlockableValid(void* instance, void* unlockable) {
+    if (UnlockAllSkins) return true;
+    return old_IsCustomizeUnlockableValid ? old_IsCustomizeUnlockableValid(instance, unlockable) : false;
+}
+
+// PlayerCustomizationPanelHandler.IsOwnedOrFree - RVA: 0x3ECB034
+bool (*old_IsOwnedOrFree)(void* instance, void* uIdStr) = NULL;
+bool hook_IsOwnedOrFree(void* instance, void* uIdStr) {
+    if (UnlockAllSkins) return true;
+    return old_IsOwnedOrFree ? old_IsOwnedOrFree(instance, uIdStr) : false;
+}
+
+// PlayerCustomizationPanelHandler.IsUnlockableLocked - RVA: 0x3EC4F74
+bool (*old_IsUnlockableLocked)(void* instance, void* unlockable) = NULL;
+bool hook_IsUnlockableLocked(void* instance, void* unlockable) {
+    if (UnlockAllSkins) return false;
+    return old_IsUnlockableLocked ? old_IsUnlockableLocked(instance, unlockable) : true;
+}
+
+// PlayerCustomizationPanelHandler.IsBuyable - RVA: 0x3EC513C
+bool (*old_IsBuyable)(void* instance, void* unlockable) = NULL;
+bool hook_IsBuyable(void* instance, void* unlockable) {
+    if (UnlockAllSkins) return false;
+    return old_IsBuyable ? old_IsBuyable(instance, unlockable) : false;
+}
+
+// PlayerCustomizationPanelHandler.SpawnRecipes - RVA: 0x3EC3D78
+void (*old_SpawnRecipes)(void* instance, void* unlockableInfo) = NULL;
+void hook_SpawnRecipes(void* instance, void* unlockableInfo) {
+    if (UnlockAllSkins) {
+        return; // Satın alma butonlarını hiç oluşturma
+    }
+    if (old_SpawnRecipes) {
+        old_SpawnRecipes(instance, unlockableInfo);
+    }
+}
+
+// PlayerCustomizationPanelHandler.ApplyChanges - RVA: 0x3EBB530
+void (*PlayerCustomizationPanelHandler_ApplyChanges)(void* instance, bool closePanel) = NULL;
+
+// PlayerCustomizationPanelHandler.ChangeCosmetic - RVA: 0x3ECB2B4
+void (*old_ChangeCosmetic)(void* instance, void* typeStr, void* idStr, bool apply, bool addToProperties) = NULL;
+void hook_ChangeCosmetic(void* instance, void* typeStr, void* idStr, bool apply, bool addToProperties) {
+    if (UnlockAllSkins) {
+        apply = true;
+        addToProperties = true;
+    }
+    if (old_ChangeCosmetic) {
+        old_ChangeCosmetic(instance, typeStr, idStr, apply, addToProperties);
+    }
+    if (UnlockAllSkins && instance && PlayerCustomizationPanelHandler_ApplyChanges) {
+        PlayerCustomizationPanelHandler_ApplyChanges(instance, false);
+    }
+}
 
 typedef void* (*il2cpp_string_new_t)(const char*);
 il2cpp_string_new_t il2cpp_string_new_func = NULL;
@@ -433,7 +526,9 @@ int GetPlayerColorId(void* instance) {
 }
 
 void DetectCurrentMap() {
-    if (g_MapManager) {
+    if (g_MainManager && MainManager_GetCurrentMap) {
+        g_CurrentMapId = (int)MainManager_GetCurrentMap(g_MainManager);
+    } else if (g_MapManager) {
         WideCharToUTF8(g_MapManager, OFFSET_MM_ROOMMAP, g_CurrentMapName, sizeof(g_CurrentMapName));
         if (g_CurrentMapName[0] != '\0') {
             int parsedId = atoi(g_CurrentMapName);
@@ -479,8 +574,9 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
     return pos;
 }
 
+// Orijinal ESP Ölçekleme Fonksiyonu (Drone View ile Senkronize)
 float GetESPScale() {
-    float orthoSize = g_DefaultOrthoSize;
+    float orthoSize = GetCurrentOrthoSize();
     if (orthoSize <= 0) orthoSize = 5.0f;
     return g_ScreenHeight / (orthoSize * 2.0f);
 }
@@ -630,13 +726,15 @@ RoleInfo GetRoleInfo(int roleId) {
 void ApplyDroneViewDelayed() {
     if (!localPlayerObject || !OverrideOrthographicSize) return;
     if (DroneView) {
-        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) { g_DroneViewDelay++; return; }
+        if (g_DroneViewDelay < DRONE_VIEW_DELAY_FRAMES) {
+            g_DroneViewDelay++;
+            return;
+        }
         if (!g_DroneViewInitialized) {
             g_DroneViewInitialized = true;
             g_DroneViewReady = true;
             OverrideOrthographicSize(localPlayerObject, DroneZoom);
-        }
-        else if (g_DroneViewReady) {
+        } else if (g_DroneViewReady) {
             OverrideOrthographicSize(localPlayerObject, DroneZoom);
         }
     }
@@ -738,9 +836,13 @@ void SendMiniMapBatch(JNIEnv* env) {
     int offset = 0;
     g_MiniMapBatchBuffer[0] = '\0';
 
+    // 1. Canlı Oyuncuları Ekle
     for (int i = 0; i < g_RenderPlayerCount; i++) {
         PlayerData* p = &g_RenderPlayers[i];
         if (!p->isValid) continue;
+
+        // Hayaletleri veya ölüleri bu döngüde atla (Gerçek cesetler deadBodies listesinden basılacak)
+        if (p->isGhost || p->isDowned) continue;
 
         int colorId = GetPlayerColorId(p->instance);
 
@@ -752,25 +854,75 @@ void SendMiniMapBatch(JNIEnv* env) {
         }
         safeName[j] = '\0';
 
-        bool isDeadPlayer = p->isGhost || p->isDowned;
-        Vector2 targetCoord = p->position;
-
-        // ÖLÜ OYUNCU HİZALAMA:
-        // Eğer killedLocation geçerliyse öldüğü odaya sabitler.
-        // Eğer henüz yazılmadıysa son bilinen pozisyonu kullanır, asla es geçmez (continue yapılmaz).
-        if (isDeadPlayer) {
-            if (p->hasKilledLoc) {
-                targetCoord = p->killedLocation;
-            }
-        }
-
         offset += snprintf(g_MiniMapBatchBuffer + offset, sizeof(g_MiniMapBatchBuffer) - offset,
                            "%.1f,%.1f,%d,%d,%d,%s;",
-                           targetCoord.x, targetCoord.y,
-                           isDeadPlayer ? 1 : 0,
+                           p->position.x, p->position.y,
+                           0, // isDead = 0 (Canlı)
                            p->isLocal ? 1 : 0,
                            colorId, safeName);
         if (offset >= sizeof(g_MiniMapBatchBuffer) - 100) break;
+    }
+
+    // 2. Yerde Yatan Gerçek Cesetleri Ekle (GameManager.deadBodies)
+    if (g_GameManager && !isInVotingScreen) {
+        void* bodyList = *(void**)((uintptr_t)g_GameManager + OFFSET_GM_DEADBODIES);
+        if (bodyList) {
+            void* items = *(void**)((uintptr_t)bodyList + 0x10);
+            int count = *(int*)((uintptr_t)bodyList + 0x18);
+
+            for (int b = 0; b < count && items; b++) {
+                void* bodyObj = *(void**)((uintptr_t)items + 0x20 + (b * 8));
+                if (!bodyObj) continue;
+
+                void* bodyHandler = *(void**)((uintptr_t)bodyObj + 0x10);
+                if (!bodyHandler) continue;
+
+                // Sahnede gerçekten aktif mi? (0x54: bool colliderSpawned)
+                bool colliderSpawned = *(bool*)((uintptr_t)bodyHandler + 0x54);
+                if (!colliderSpawned) continue;
+
+                // BodyHandler.origin (Vector3 at 0x2C)
+                Vector3 originPos = *(Vector3*)((uintptr_t)bodyHandler + 0x2C);
+                if (originPos.x == 0.0f && originPos.y == 0.0f) continue;
+
+                char bodyUserId[64] = "";
+                WideCharToUTF8(bodyHandler, 0x20, bodyUserId, sizeof(bodyUserId));
+
+                int bodyColorId = 0;
+
+                // Cesedin gerçek sahibini eşleştirerek rengini al
+                for (int pIdx = 0; pIdx < g_RenderPlayerCount; pIdx++) {
+                    void* pInst = g_RenderPlayers[pIdx].instance;
+                    if (!pInst) continue;
+
+                    char pNick[64] = "";
+                    GetPlayerNickname(pInst, pNick, sizeof(pNick));
+
+                    if (bodyUserId[0] != '\0' && (strstr(bodyUserId, pNick) || strcmp(bodyUserId, pNick) == 0)) {
+                        bodyColorId = GetPlayerColorId(pInst);
+                        break;
+                    }
+
+                    // Alternatif: Ölen oyuncunun öldüğü yer ile ceset konumu 2 metre içindeyse eşleştir
+                    if (g_RenderPlayers[pIdx].isGhost || g_RenderPlayers[pIdx].isDowned) {
+                        float dist = hypotf(g_RenderPlayers[pIdx].killedLocation.x - originPos.x,
+                                            g_RenderPlayers[pIdx].killedLocation.y - originPos.y);
+                        if (dist < 2.5f) {
+                            bodyColorId = GetPlayerColorId(pInst);
+                            break;
+                        }
+                    }
+                }
+
+                offset += snprintf(g_MiniMapBatchBuffer + offset, sizeof(g_MiniMapBatchBuffer) - offset,
+                                   "%.1f,%.1f,%d,%d,%d,%s;",
+                                   originPos.x, originPos.y,
+                                   1, // isDead = 1
+                                   0,
+                                   bodyColorId, "Body");
+                if (offset >= sizeof(g_MiniMapBatchBuffer) - 100) break;
+            }
+        }
     }
 
     jstring jdata = env->NewStringUTF(g_MiniMapBatchBuffer);
@@ -812,7 +964,7 @@ bool ClipLine(float* x1, float* y1, float* x2, float* y2) {
             x = *x1 + (*x2 - *x1) * (ymin - *y1) / (*y2 - *y1);
             y = ymin;
         } else if (outcodeOut & 2) {
-            y = *y1 + (*y2 - *y1) * (xmax - *x1) / (*x2 - *x1);
+            y = *y1 + (*y2 - *x1) * (xmax - *x1) / (*x2 - *x1);
             x = xmax;
         } else if (outcodeOut & 1) {
             y = *y1 + (*y2 - *y1) * (xmin - *x1) / (*x2 - *x1);
@@ -932,7 +1084,6 @@ void ExecuteUnlockSabotages() {
         bool isImpostor = *(bool*)((uintptr_t)task + OFFSET_GT_ISIMPOSTORTASK);
         bool isFake = *(bool*)((uintptr_t)task + OFFSET_GT_ISFAKETASK);
 
-        // Yalnızca sabotaj kilidini açan görevler
         if (isImpostor && !isFake) {
             char taskId[64];
             GetTaskId(task, taskId, sizeof(taskId));
@@ -1153,10 +1304,10 @@ void RenderDebugPanelBatch() {
     snprintf(buf, sizeof(buf), "GM:%c | State:%s(%d) | InGame:%c | Lobby:%c | Vote:%c | Players:%d | Dead:%d", g_GameManager ? 'Y' : 'N', GetGameStateName(g_CurrentGameState), g_CurrentGameState, isInGame ? 'Y' : 'N', isInLobby ? 'Y' : 'N', isInVotingScreen ? 'Y' : 'N', g_RenderPlayerCount, g_DeadPlayersCount);
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
-    snprintf(buf, sizeof(buf), "MapManager:%c | MapID:%d | RoomMap:%s", g_MapManager ? 'Y' : 'N', g_CurrentMapId, g_CurrentMapName);
+    snprintf(buf, sizeof(buf), "MainManager:%c | MapManager:%c | MapID:%d | RoomMap:%s", g_MainManager ? 'Y' : 'N', g_MapManager ? 'Y' : 'N', g_CurrentMapId, g_CurrentMapName);
     BatchAddText(centerX, startY, buf, COLOR_GOLD); startY += lineHeight;
 
-    snprintf(buf, sizeof(buf), "NoClip:%c | AutoReady:%c", NoClip ? 'Y' : 'N', AutoReady ? 'Y' : 'N');
+    snprintf(buf, sizeof(buf), "NoClip:%c | AutoReady:%c | UnlockSkins:%c", NoClip ? 'Y' : 'N', AutoReady ? 'Y' : 'N', UnlockAllSkins ? 'Y' : 'N');
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
     RoleInfo myRole = GetRoleInfo(localPlayerRole);
@@ -1340,7 +1491,7 @@ void RefreshPlayerDataAndRender() {
 
 int (*old_get_deadPlayersCount)() = NULL;
 
-// CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x4437958
+// CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x44481BC
 void (*old_StateCameraUpdate)(void* instance, Vector3 worldUp, float deltaTime);
 void StateCameraUpdate(void* instance, Vector3 worldUp, float deltaTime) {
     old_StateCameraUpdate(instance, worldUp, deltaTime);
@@ -1352,7 +1503,7 @@ void StateCameraUpdate(void* instance, Vector3 worldUp, float deltaTime) {
     }
 }
 
-// PlayableEntity.Update - RVA: 0x3E4FC30
+// PlayableEntity.Update - RVA: 0x3E60048
 void (*old_Update)(void *instance);
 void Update(void *instance) {
     if (instance) {
@@ -1397,7 +1548,7 @@ void Update(void *instance) {
     old_Update(instance);
 }
 
-// GameManager.Update - RVA: 0x3AD9E54
+// GameManager.Update - RVA: 0x3AE8478
 void (*old_GameManager_Update)(void* instance);
 void GameManager_Update(void* instance) {
     if (instance) {
@@ -1408,7 +1559,7 @@ void GameManager_Update(void* instance) {
         isInLobby = (g_CurrentGameState <= 1);
         isInGame = (g_CurrentGameState >= 2);
 
-        // Lobiye dönüldüğünde haritayı kesin olarak kapat
+        // Lobiye dönüldüğünde haritayı kesin kapat
         if (isInLobby && s_LastMiniMapState) {
             s_LastMiniMapState = false;
             JNIEnv* env = GetJNIEnv();
@@ -1418,23 +1569,51 @@ void GameManager_Update(void* instance) {
         }
 
         // 3 = Opening, 4 = Discussion, 5 = Voting, 6 = Waiting, 7 = Proceeding
-        isInVotingScreen = (g_CurrentGameState >= 3 && g_CurrentGameState <= 7);
+        bool nowVoting = (g_CurrentGameState >= 3 && g_CurrentGameState <= 7);
+
+        // Toplantı bittiğinde haritadaki eski cesetleri anında temizle
+        static bool s_PrevVoting = false;
+        if (s_PrevVoting && !nowVoting) {
+            JNIEnv* env = GetJNIEnv();
+            if (env && g_MenuClass && g_UpdateMiniMapBatchMethod) {
+                jstring empty = env->NewStringUTF("");
+                if (empty) {
+                    env->CallStaticVoidMethod(g_MenuClass, g_UpdateMiniMapBatchMethod, empty);
+                    env->DeleteLocalRef(empty);
+                }
+            }
+        }
+        s_PrevVoting = nowVoting;
+        isInVotingScreen = nowVoting;
     }
     old_GameManager_Update(instance);
 }
 
-// PlayableEntity.LateUpdate - RVA: 0x3E509E8
+// PlayableEntity.LateUpdate - RVA: 0x3E60E00
 void (*old_LateUpdate)(void *instance);
 void LateUpdate(void *instance) { old_LateUpdate(instance); }
 
-// PlayableEntity.TurnIntoGhost - RVA: 0x3E5B99C
+// PlayableEntity.TurnIntoGhost - RVA: 0x3E6BEC8
 void (*old_TurnIntoGhost)(void *instance, int deathReason);
 void TurnIntoGhost(void *instance, int deathReason) {
     if (AntiDeath && instance == localPlayerInstance) return;
     old_TurnIntoGhost(instance, deathReason);
 }
 
-// LocalPlayer.Update - RVA: 0x3E3536C
+// PlayableEntity.Despawn - RVA: 0x3E62A98
+void (*old_Despawn)(void *instance);
+void Despawn(void *instance) {
+    if (instance) {
+        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
+        if (isLocal) {
+            if (NoClip) ApplyNoClip(instance, false);
+            ClearAllESP();
+        }
+    }
+    old_Despawn(instance);
+}
+
+// LocalPlayer.Update - RVA: 0x3E45778
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
     old_LocalPlayer_Update(instance);
@@ -1455,21 +1634,21 @@ void LocalPlayer_Update(void *instance) {
     }
 }
 
-// LocalPlayer.GetPlayerSpeed - RVA: 0x3E44BE8
+// LocalPlayer.GetPlayerSpeed - RVA: 0x3E55000
 float (*old_GetPlayerSpeed)(void *instance);
 float GetPlayerSpeed(void *instance) {
     float speed = old_GetPlayerSpeed(instance);
     return SpeedHack ? speed * SpeedMultiplier : speed;
 }
 
-// PlayerPropertiesManager.Initialize - RVA: 0x3AC4878
+// PlayerPropertiesManager.Initialize - RVA: 0x3AD2E9C
 void (*old_PlayerPropertiesManager_Initialize)(void* instance) = NULL;
 void hook_PlayerPropertiesManager_Initialize(void* instance) {
     if (instance) g_PlayerPropertiesManager = instance;
     old_PlayerPropertiesManager_Initialize(instance);
 }
 
-// MapManager.Internal_OnMapStart - RVA: 0x3831E54
+// MapManager.Internal_OnMapStart - RVA: 0x383E378
 void (*old_Internal_OnMapStart)(void* instance) = NULL;
 void hook_Internal_OnMapStart(void* instance) {
     if (instance) {
@@ -1479,7 +1658,7 @@ void hook_Internal_OnMapStart(void* instance) {
     old_Internal_OnMapStart(instance);
 }
 
-// MapManager.Internal_OnMapLoad - RVA: 0x3831058
+// MapManager.Internal_OnMapLoad - RVA: 0x383D57C
 void (*old_Internal_OnMapLoad)(void* instance) = NULL;
 void hook_Internal_OnMapLoad(void* instance) {
     if (instance) {
@@ -1489,54 +1668,40 @@ void hook_Internal_OnMapLoad(void* instance) {
     old_Internal_OnMapLoad(instance);
 }
 
-// GGDRole.OnEnterVent - RVA: 0x3CD0438
+// GGDRole.OnEnterVent - RVA: 0x3CDEBE8
 void (*old_OnEnterVent)(void *instance, void* vent, bool setCooldown);
 void OnEnterVent(void *instance, void* vent, bool setCooldown) { old_OnEnterVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-// GGDRole.OnExitVent - RVA: 0x3CD052C
+// GGDRole.OnExitVent - RVA: 0x3CDECDC
 void (*old_OnExitVent)(void *instance, void* vent, bool setCooldown);
 void OnExitVent(void *instance, void* vent, bool setCooldown) { old_OnExitVent(instance, vent, NoCooldown ? false : setCooldown); }
 
-// GGDRole.SetVentCooldown - RVA: 0x3CCF058
+// GGDRole.SetVentCooldown - RVA: 0x3CDD808
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) { old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown); }
 
-// PlayableEntity.Despawn - RVA: 0x3E52680
-void (*old_Despawn)(void *instance);
-void Despawn(void *instance) {
-    if (instance) {
-        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
-        if (isLocal) {
-            if (NoClip) ApplyNoClip(instance, false);
-            ClearAllESP();
-        }
-    }
-    old_Despawn(instance);
-}
-
-// TasksHandler.OnEnable - RVA: 0x3E2A1B0
+// TasksHandler.OnEnable - RVA: 0x3E3A3D8
 void (*old_TasksHandler_OnEnable)(void* instance);
 void TasksHandler_OnEnable(void* instance) { if (instance) g_TasksHandler = instance; old_TasksHandler_OnEnable(instance); }
 
-// TasksHandler.OnDisable - RVA: 0x3E2A2B8
+// TasksHandler.OnDisable - RVA: 0x3E3A4E0
 void (*old_TasksHandler_OnDisable)(void* instance);
 void TasksHandler_OnDisable(void* instance) { if (instance == g_TasksHandler) g_TasksHandler = NULL; old_TasksHandler_OnDisable(instance); }
 
-// RoofHandler.Awake - RVA: 0x3DBEE78
+// RoofHandler.Awake - RVA: 0x3DCEF5C
 void (*old_RoofHandler_Awake)(void* instance);
 void RoofHandler_Awake(void* instance) { if (instance) g_RoofHandler = instance; old_RoofHandler_Awake(instance); }
 
-// RoofHandler.OnDestroy - RVA: 0x3DBEF7C
+// RoofHandler.OnDestroy - RVA: 0x3DCF060
 void (*old_RoofHandler_OnDestroy)(void* instance);
 void RoofHandler_OnDestroy(void* instance) { if (instance == g_RoofHandler) { g_RoofHandler = NULL; g_RoofRemovedThisRound = false; } old_RoofHandler_OnDestroy(instance); }
 
-// LocalPlayer.StartRound - RVA: 0x3E3CEB4
+// LocalPlayer.StartRound - RVA: 0x3E4D2C0
 void (*old_LocalPlayer_StartRound)(void* instance, bool isFirstRound);
 void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
     g_RoofRemovedThisRound = false;
     if (RemoveRoof && g_RoofHandler && RoofHandler_DeactivateRoofs) { RoofHandler_DeactivateRoofs(g_RoofHandler, true); g_RoofRemovedThisRound = true; }
 
-    // Yeni tur başladı: Eski turun tüm ceset konumlarını sıfırla
     for (int i = 0; i < MAX_PLAYERS; i++) {
         g_RenderPlayers[i].hasKilledLoc = false;
         g_RenderPlayers[i].killedLocation = {0.0f, 0.0f};
@@ -1545,7 +1710,7 @@ void LocalPlayer_StartRound(void* instance, bool isFirstRound) {
     old_LocalPlayer_StartRound(instance, isFirstRound);
 }
 
-// WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x37E4400
+// WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x37EFD38
 void (*old_WallCollisionCheckHandler_OnCollisionEnter2D)(void* instance, void* collision);
 void WallCollisionCheckHandler_OnCollisionEnter2D(void* instance, void* collision) {
     if (NoClip) {
@@ -1555,14 +1720,14 @@ void WallCollisionCheckHandler_OnCollisionEnter2D(void* instance, void* collisio
     old_WallCollisionCheckHandler_OnCollisionEnter2D(instance, collision);
 }
 
-// VoiceChatHandler.CanHearPlayer - RVA: 0x3844A90
+// VoiceChatHandler.CanHearPlayer - RVA: 0x3850FDC
 bool (*old_CanHearPlayer)(void* instance, void* targetController, void* otherPlayer, bool global);
 bool hook_CanHearPlayer(void* instance, void* targetController, void* otherPlayer, bool global) {
     if (HearDeadVoice) return true;
     return old_CanHearPlayer(instance, targetController, otherPlayer, global);
 }
 
-// VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x3844D80
+// VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x38512CC
 bool (*old_CanHearPlayerFromMeeting)(void* instance, void* otherPlayer);
 bool hook_CanHearPlayerFromMeeting(void* instance, void* otherPlayer) {
     if (HearFarPlayers) return true;
@@ -1613,6 +1778,7 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Button_[\uEBA6]Complete 1 Task"),
 
             OBFUSCATE("Category_[\uE190]Miscellaneous"),
+            OBFUSCATE("Toggle_True_[\uE2C4]Unlock All Skins [BETA]"),
             OBFUSCATE("Button_[\uE0CE]Call Emergency"),
             OBFUSCATE("Toggle_[\uE186]Auto Ready (Lobby)"),
 
@@ -1684,12 +1850,13 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 25: SafeAutoTasks = boolean; if (boolean) g_LastSafeTaskTime = std::chrono::steady_clock::now(); break;
         case 26: btnCompleteOneTask = true; break;
 
-        case 27: btnCallEmergency = true; break;
-        case 28: AutoReady = boolean; break;
-        case 29: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
-        case 30: AntiDeath = boolean; break;
-        case 31: SpeedHack = boolean; break;
-        case 32: SpeedMultiplier = (float)value / 10.0f; break;
+        case 27: UnlockAllSkins = boolean; break;
+        case 28: btnCallEmergency = true; break;
+        case 29: AutoReady = boolean; break;
+        case 30: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
+        case 31: AntiDeath = boolean; break;
+        case 32: SpeedHack = boolean; break;
+        case 33: SpeedMultiplier = (float)value / 10.0f; break;
     }
 }
 
@@ -1707,110 +1874,124 @@ void hack_thread() {
     }
 
 #if defined(__aarch64__)
-    // GameManager.Update - RVA: 0x3AD9E54
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3AD9E54")), GameManager_Update, old_GameManager_Update);
+    // GameManager.Update - RVA: 0x3AE8478
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3AE8478")), GameManager_Update, old_GameManager_Update);
 
-    // GameManager.IsInGame - RVA: 0x3ADC5B4
-    GameManager_IsInGame = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3ADC5B4")));
+    // GameManager.IsInGame - RVA: 0x3AEABD8
+    GameManager_IsInGame = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AEABD8")));
 
-    // GameManager.IsInLobby - RVA: 0x3ADC5C4
-    GameManager_IsInLobby = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3ADC5C4")));
+    // GameManager.IsInLobby - RVA: 0x3AEABE8
+    GameManager_IsInLobby = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AEABE8")));
 
-    // GameManager.IsInMeeting - RVA: 0x3ADC5D4
-    GameManager_IsInMeeting = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3ADC5D4")));
+    // GameManager.IsInMeeting - RVA: 0x3AEABF8
+    GameManager_IsInMeeting = (bool (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AEABF8")));
 
-    // PlayerPropertiesManager.Initialize - RVA: 0x3AC4878
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3AC4878")), hook_PlayerPropertiesManager_Initialize, old_PlayerPropertiesManager_Initialize);
+    // PlayerPropertiesManager.Initialize - RVA: 0x3AD2E9C
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3AD2E9C")), hook_PlayerPropertiesManager_Initialize, old_PlayerPropertiesManager_Initialize);
 
-    // PlayerPropertiesManager.ChangeReadyState - RVA: 0x3AC4978
-    PlayerPropertiesManager_ChangeReadyState = (void (*)(void*, int))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AC4978")));
+    // PlayerPropertiesManager.ChangeReadyState - RVA: 0x3AD2F9C
+    PlayerPropertiesManager_ChangeReadyState = (void (*)(void*, int))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AD2F9C")));
 
-    // PlayerPropertiesManager.GetUserProperties - RVA: 0x3AC5A98
-    PlayerPropertiesManager_GetUserProperties = (void* (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AC5A98")));
+    // PlayerPropertiesManager.GetUserProperties - RVA: 0x3AD40BC
+    PlayerPropertiesManager_GetUserProperties = (void* (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3AD40BC")));
 
-    // MapManager.Internal_OnMapStart - RVA: 0x3831E54
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3831E54")), hook_Internal_OnMapStart, old_Internal_OnMapStart);
+    // MainManager.Update & GetCurrentMap
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3ABBE70")), hook_MainManager_Update, old_MainManager_Update);
+    MainManager_GetCurrentMap = (uint8_t (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3ABD7A4")));
 
-    // MapManager.Internal_OnMapLoad - RVA: 0x3831058
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3831058")), hook_Internal_OnMapLoad, old_Internal_OnMapLoad);
+    // UnlockablesManager & Customization Hooks (Güncel RVA Değerleri)
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3EBD440")), hook_IsCustomizeUnlockableValid, old_IsCustomizeUnlockableValid);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3ECB034")), hook_IsOwnedOrFree, old_IsOwnedOrFree);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3EC4F74")), hook_IsUnlockableLocked, old_IsUnlockableLocked);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3EC513C")), hook_IsBuyable, old_IsBuyable);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3EC3D78")), hook_SpawnRecipes, old_SpawnRecipes);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3ECB2B4")), hook_ChangeCosmetic, old_ChangeCosmetic);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3ADB0EC")), hook_UnlockableIsOwned, old_UnlockableIsOwned);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3ADAC8C")), hook_UnlockableIsFreeOrAchievement, old_UnlockableIsFreeOrAchievement);
 
-    // PlayableEntity.Update - RVA: 0x3E4FC30
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E4FC30")), Update, old_Update);
+    PlayerCustomizationPanelHandler_ApplyChanges = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3EBB530")));
 
-    // PlayableEntity.LateUpdate - RVA: 0x3E509E8
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E509E8")), LateUpdate, old_LateUpdate);
+    // MapManager Hooks
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x383E378")), hook_Internal_OnMapStart, old_Internal_OnMapStart);
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x383D57C")), hook_Internal_OnMapLoad, old_Internal_OnMapLoad);
 
-    // PlayableEntity.TurnIntoGhost - RVA: 0x3E5B99C
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E5B99C")), TurnIntoGhost, old_TurnIntoGhost);
+    // PlayableEntity.Update - RVA: 0x3E60048
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E60048")), Update, old_Update);
 
-    // PlayableEntity.Despawn - RVA: 0x3E52680
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E52680")), Despawn, old_Despawn);
+    // PlayableEntity.LateUpdate - RVA: 0x3E60E00
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E60E00")), LateUpdate, old_LateUpdate);
 
-    // LocalPlayer.Update - RVA: 0x3E3536C
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E3536C")), LocalPlayer_Update, old_LocalPlayer_Update);
+    // PlayableEntity.TurnIntoGhost - RVA: 0x3E6BEC8
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E6BEC8")), TurnIntoGhost, old_TurnIntoGhost);
 
-    // LocalPlayer.GetPlayerSpeed - RVA: 0x3E44BE8
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E44BE8")), GetPlayerSpeed, old_GetPlayerSpeed);
+    // PlayableEntity.Despawn - RVA: 0x3E62A98
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E62A98")), Despawn, old_Despawn);
 
-    // LocalPlayer.StartRound - RVA: 0x3E3CEB4
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E3CEB4")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
+    // LocalPlayer.Update - RVA: 0x3E45778
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E45778")), LocalPlayer_Update, old_LocalPlayer_Update);
 
-    // CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x4437958
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x4437958")), StateCameraUpdate, old_StateCameraUpdate);
+    // LocalPlayer.GetPlayerSpeed - RVA: 0x3E55000
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E55000")), GetPlayerSpeed, old_GetPlayerSpeed);
 
-    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3E455BC
-    OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E455BC")));
+    // LocalPlayer.StartRound - RVA: 0x3E4D2C0
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E4D2C0")), LocalPlayer_StartRound, old_LocalPlayer_StartRound);
 
-    // PlayableEntity.TeleportTo - RVA: 0x3E61054
-    TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E61054")));
+    // CinemachineStateDrivenCamera.InternalUpdateCameraState - RVA: 0x44481BC
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x44481BC")), StateCameraUpdate, old_StateCameraUpdate);
 
-    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3E4CF04
-    SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E4CF04")));
+    // LocalPlayer.OverrideOrthographicSize - RVA: 0x3E559D4
+    OverrideOrthographicSize = (void (*)(void*, float))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E559D4")));
 
-    // GGDRole.OnEnterVent - RVA: 0x3CD0438
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CD0438")), OnEnterVent, old_OnEnterVent);
+    // PlayableEntity.TeleportTo - RVA: 0x3E71684
+    TeleportTo = (void (*)(void*, Vector2, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E71684")));
 
-    // GGDRole.OnExitVent - RVA: 0x3CD052C
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CD052C")), OnExitVent, old_OnExitVent);
+    // LocalPlayer.SetCanSeeGhosts - RVA: 0x3E5D31C
+    SetCanSeeGhosts = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E5D31C")));
 
-    // GGDRole.SetVentCooldown - RVA: 0x3CCF058
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CCF058")), SetVentCooldown, old_SetVentCooldown);
+    // GGDRole.OnEnterVent - RVA: 0x3CDEBE8
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CDEBE8")), OnEnterVent, old_OnEnterVent);
 
-    // TasksHandler.OnEnable - RVA: 0x3E2A1B0
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E2A1B0")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
+    // GGDRole.OnExitVent - RVA: 0x3CDECDC
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CDECDC")), OnExitVent, old_OnExitVent);
 
-    // TasksHandler.OnDisable - RVA: 0x3E2A2B8
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E2A2B8")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
+    // GGDRole.SetVentCooldown - RVA: 0x3CDD808
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3CDD808")), SetVentCooldown, old_SetVentCooldown);
 
-    // TasksHandler.CompleteTask - RVA: 0x3E2D680
-    TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E2D680")));
+    // TasksHandler.OnEnable - RVA: 0x3E3A3D8
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E3A3D8")), TasksHandler_OnEnable, old_TasksHandler_OnEnable);
 
-    // TasksHandler.UpdateTaskVisuals - RVA: 0x3E2EDEC
-    TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E2EDEC")));
+    // TasksHandler.OnDisable - RVA: 0x3E3A4E0
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3E3A4E0")), TasksHandler_OnDisable, old_TasksHandler_OnDisable);
 
-    // RoofHandler.Awake - RVA: 0x3DBEE78
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DBEE78")), RoofHandler_Awake, old_RoofHandler_Awake);
+    // TasksHandler.CompleteTask - RVA: 0x3E3D8C0
+    TasksHandler_CompleteTask = (void (*)(void*, void*, bool, bool, bool, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E3D8C0")));
 
-    // RoofHandler.OnDestroy - RVA: 0x3DBEF7C
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DBEF7C")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
+    // TasksHandler.UpdateTaskVisuals - RVA: 0x3E3F02C
+    TasksHandler_UpdateTaskVisuals = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E3F02C")));
 
-    // RoofHandler.DeactivateRoofs - RVA: 0x3DBF188
-    RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DBF188")));
+    // RoofHandler.Awake - RVA: 0x3DCEF5C
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCEF5C")), RoofHandler_Awake, old_RoofHandler_Awake);
 
-    // PlayerController.CallEmergency - RVA: 0x3E72C18
-    PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E72C18")));
+    // RoofHandler.OnDestroy - RVA: 0x3DCF060
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3DCF060")), RoofHandler_OnDestroy, old_RoofHandler_OnDestroy);
 
-    // Collider2D.set_isTrigger - RVA: 0x754CABC
-    Collider2D_set_isTrigger = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x754CABC")));
+    // RoofHandler.DeactivateRoofs - RVA: 0x3DCF26C
+    RoofHandler_DeactivateRoofs = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3DCF26C")));
 
-    // WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x37E4400
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x37E4400")), WallCollisionCheckHandler_OnCollisionEnter2D, old_WallCollisionCheckHandler_OnCollisionEnter2D);
+    // PlayerController.CallEmergency - RVA: 0x3E83250
+    PlayerController_CallEmergency = (void (*)(void*))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x3E83250")));
 
-    // VoiceChatHandler.CanHearPlayer - RVA: 0x3844A90
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3844A90")), hook_CanHearPlayer, old_CanHearPlayer);
+    // Collider2D.set_isTrigger - RVA: 0x75632FC
+    Collider2D_set_isTrigger = (void (*)(void*, bool))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x75632FC")));
 
-    // VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x3844D80
-    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3844D80")), hook_CanHearPlayerFromMeeting, old_CanHearPlayerFromMeeting);
+    // WallCollisionCheckHandler.OnCollisionEnter2D - RVA: 0x37EFD38
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x37EFD38")), WallCollisionCheckHandler_OnCollisionEnter2D, old_WallCollisionCheckHandler_OnCollisionEnter2D);
+
+    // VoiceChatHandler.CanHearPlayer - RVA: 0x3850FDC
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x3850FDC")), hook_CanHearPlayer, old_CanHearPlayer);
+
+    // VoiceChatHandler.CanHearPlayerFromMeeting - RVA: 0x38512CC
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x38512CC")), hook_CanHearPlayerFromMeeting, old_CanHearPlayerFromMeeting);
 
     LOGI("All features and hooks installed!");
 #endif
