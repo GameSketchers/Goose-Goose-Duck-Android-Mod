@@ -36,6 +36,7 @@ FIELD_TARGETS = {
         "OFFSET_PE_HASKILLED": [r"\bbool\s+hasKilledThisRound\b", r"\bbool\s+hasKilled\b"],
         "OFFSET_PE_TEAMID": [r"\bint\s+teamId\b"],
         "OFFSET_PE_FOGOFWAR": [r"\bbool\s+fogOfWarEnabled\b", r"\bbool\s+fogOfWar\b"],
+        "OFFSET_PE_KILLEDLOCATION": [r"\bVector2\s+killedLocation\b"],
         "OFFSET_PE_ISRUNNING": [r"\bbool\s+isRunning\b"],
         "OFFSET_PE_ISGHOST": [r"\bbool\s+isGhost\b"],
         "OFFSET_PE_ISINFECTED": [r"\bbool\s+isInfected\b"],
@@ -61,6 +62,7 @@ FIELD_TARGETS = {
         "OFFSET_PP_READYSTATE": [r"\bint\s+readyState\b"]
     },
     "LocalPlayer": {
+        "OFFSET_LP_FOGOFWAR": [r"\bFogOfWar\s+fogOfWar\b"],
         "OFFSET_LP_MAINCAMERA": [r"\bCamera\s+mainCamera\b"],
         "OFFSET_LP_STATECAMERA": [r"\bCinemachineStateDrivenCamera\s+stateCamera\b"],
         "OFFSET_LP_SCRIPTABLESTATE": [r"\bCinemachineVirtualCamera\s+scriptableState\b"],
@@ -98,12 +100,22 @@ FIELD_TARGETS = {
     "GameManager": {
         "OFFSET_GM_GAMESTATE": [r"\bGameManager\.GameState\s+gameState\b", r"\bGameState\s+gameState\b"],
         "OFFSET_GM_DEADBODIES": [r"\bList<GameManager\.Body>\s+deadBodies\b"]
-    }
+    },
+    "UICooldownButton": {
+            "OFFSET_UICB_INTERNALCOOLDOWN": [r"\bObscuredFloat\s+InternalCooldown\b"],
+            "OFFSET_UICB_INTERACTABLEOVERRIDE": [r"\bbool\s+interactableOverride\b"],
+            "OFFSET_UICB_INTERACTABLEOVERRIDEEVENINCOOLDOWN": [r"\bbool\s+interactableOverrideEvenInCooldown\b"]
+    },
 }
 
 METHOD_TARGETS = {
     ("MainManager", "Update"): r"void\s+Update\s*\(",
     ("MainManager", "GetCurrentMap"): r"EMap\s+GetCurrentMap\s*\(",
+
+    ("ObscuredFloat", "Encrypt"): r"int\s+Encrypt\s*\(float",
+    ("ObscuredFloat", "Decrypt"): r"float\s+Decrypt\s*\(int",
+
+    ("UICooldownButton", "set_Cooldown"): r"void\s+set_Cooldown\s*\(",
 
     ("PlayableEntity", "Update"): r"void\s+Update\s*\(",
     ("PlayableEntity", "LateUpdate"): r"void\s+LateUpdate\s*\(",
@@ -429,4 +441,4 @@ def main():
     print(f"\n{C.GREEN}{C.BOLD}[✓] All operations completed successfully!{C.RESET}\n")
 
 if __name__ == "__main__":
-    main()
+    main(

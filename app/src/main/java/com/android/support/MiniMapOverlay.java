@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -33,8 +34,7 @@ public class MiniMapOverlay {
 
     private static final int BAR_HEIGHT = 18; // alt sürükleme çubuğu (dp)
 
-    private int currentWidth = 150;
-    private int currentHeight = 150;
+    private static final int DEFAULT_SIZE = 150;
     private static final int MIN_SIZE = 110;
     private static final int MAX_SIZE = 450;
 
@@ -50,15 +50,15 @@ public class MiniMapOverlay {
                 WindowManager.LayoutParams.TYPE_PHONE;
 
         params = new WindowManager.LayoutParams(
-                dp(currentWidth),
-                dp(currentHeight + 20),
+                dp(DEFAULT_SIZE),
+                dp(DEFAULT_SIZE) + dp(BAR_HEIGHT),
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
         );
-        params.gravity = Gravity.TOP | Gravity.END;
-        params.x = 0;
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.x = Math.max(0, screenW() - params.width); // başlangıçta sağ üst köşe
         params.y = 0;
 
         rootLayout = new RelativeLayout(context);
@@ -109,27 +109,23 @@ public class MiniMapOverlay {
         dragBar.setOnTouchListener(createMoveListener());
         rootLayout.addView(dragBar);
 
-        // Büyütme ikonu: SOL kenar + haritanın dikey ORTASI
+        // Büyütme tutamacı: SOL-ALT, sürükleme çubuğuyla aynı hizada (dikey ortalı), arka plansız
         TextView resizeHandle = new TextView(context);
-        resizeHandle.setText("\uE0A6");
         resizeHandle.setTextColor(Color.WHITE);
-        resizeHandle.setTextSize(14f);
+        resizeHandle.setTextSize(12f);
+        resizeHandle.setGravity(Gravity.CENTER);
+        resizeHandle.setIncludeFontPadding(false);
         try {
             resizeHandle.setTypeface(Typeface.createFromAsset(context.getAssets(), "fonts/Phosphor-Bold.ttf"));
-        } catch (Exception ignored) {}
+            resizeHandle.setText("\uE0A6");
+        } catch (Exception e) {
+            resizeHandle.setText("\u2922"); // font yoksa yedek simge (sol-alt/sağ-üst oku)
+        }
 
-        GradientDrawable handleBg = new GradientDrawable();
-        handleBg.setColor(Color.parseColor("#99000000"));
-        handleBg.setCornerRadius(dp(8));
-        resizeHandle.setBackground(handleBg);
-
-        RelativeLayout.LayoutParams resizeParams = new RelativeLayout.LayoutParams(dp(26), dp(26));
+        RelativeLayout.LayoutParams resizeParams = new RelativeLayout.LayoutParams(dp(26), dp(BAR_HEIGHT));
         resizeParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-        resizeParams.addRule(RelativeLayout.CENTER_VERTICAL);
-        // Alt çubuk (18dp) hariç tutularak harita alanının gerçek ortasına denk gelir
-        resizeParams.bottomMargin = dp(BAR_HEIGHT);
+        resizeParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
         resizeHandle.setLayoutParams(resizeParams);
-        resizeHandle.setGravity(Gravity.CENTER);
         resizeHandle.setOnTouchListener(createResizeListener());
         rootLayout.addView(resizeHandle);
     }
@@ -149,9 +145,14 @@ public class MiniMapOverlay {
                         initialTouchY = event.getRawY();
                         return true;
                     case MotionEvent.ACTION_MOVE:
-                        params.x = initialX - (int) (event.getRawX() - initialTouchX);
-                        params.y = initialY + (int) (event.getRawY() - initialTouchY);
-                        if (isAttached) windowManager.updateViewLayout(rootLayout, params);
+                        int nx = initialX + (int) (event.getRawX() - initialTouchX);
+                        int ny = initialY + (int) (event.getRawY() - initialTouchY);
+                        params.x = Math.max(0, Math.min(screenW() - params.width, nx));
+                        params.y = Math.max(0, Math.min(screenH() - params.height, ny));
+                        applyLayout();
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
                         return true;
                 }
                 return false;
@@ -161,28 +162,52 @@ public class MiniMapOverlay {
 
     private View.OnTouchListener createResizeListener() {
         return new View.OnTouchListener() {
-            private int initialW;
-            private float initialTouchX;
+            private int initialSize, initialRight;
+            private float initialTouchX, initialTouchY;
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        initialW = params.width;
+                        initialSize = params.width;
+                        initialRight = params.x + params.width; // sağ kenar sabit kalacak
                         initialTouchX = event.getRawX();
+                        initialTouchY = event.getRawY();
                         return true;
                     case MotionEvent.ACTION_MOVE:
-                        // Sola çek = büyüt, sağa çek = küçült
-                        int delta = (int) (initialTouchX - event.getRawX());
-                        int newSize = Math.max(dp(MIN_SIZE), Math.min(dp(MAX_SIZE), initialW + delta));
+                        // Sola/aşağı çek = büyüt, sağa/yukarı çek = küçült
+                        float dx = event.getRawX() - initialTouchX;
+                        float dy = event.getRawY() - initialTouchY;
+                        int delta = (int) ((-dx + dy) * 0.5f);
+
+                        // Ekrana sığacak en büyük boyut
+                        int maxByScreen = Math.min(
+                                initialRight,
+                                screenH() - params.y - dp(BAR_HEIGHT));
+                        int maxSize = Math.min(dp(MAX_SIZE), maxByScreen);
+                        int minSize = Math.min(dp(MIN_SIZE), maxSize);
+
+                        int newSize = Math.max(minSize, Math.min(maxSize, initialSize + delta));
                         params.width = newSize;
                         params.height = newSize + dp(BAR_HEIGHT);
-                        if (isAttached) windowManager.updateViewLayout(rootLayout, params);
+                        params.x = initialRight - newSize;
+                        applyLayout();
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
                         return true;
                 }
                 return false;
             }
         };
+    }
+
+    private void applyLayout() {
+        if (isAttached) {
+            try {
+                windowManager.updateViewLayout(rootLayout, params);
+            } catch (Exception ignored) {}
+        }
     }
 
     public void setMapId(int id) {
@@ -239,6 +264,16 @@ public class MiniMapOverlay {
     public void hide() { setVisible(false); }
     public boolean isShowing() { return isAttached; }
     public boolean isAttached() { return isAttached; }
+
+    private int screenW() {
+        DisplayMetrics dm = context.getResources().getDisplayMetrics();
+        return dm.widthPixels;
+    }
+
+    private int screenH() {
+        DisplayMetrics dm = context.getResources().getDisplayMetrics();
+        return dm.heightPixels;
+    }
 
     private int dp(int val) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, val, context.getResources().getDisplayMetrics());

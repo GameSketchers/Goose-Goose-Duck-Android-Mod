@@ -57,6 +57,7 @@ bool AutoReady = false;
 bool AntiDeath = false;
 bool UnlimitedVision = false;
 bool NoCooldown = false;
+bool NoButtonCooldown = false;
 bool NoClip = false;
 bool RemoveRoof = false;
 bool DroneView = false;
@@ -196,6 +197,11 @@ struct Quaternion { float x, y, z, w; };
 // PlayerProperties (TypeDefIndex: 1546)
 #define OFFSET_PP_READYSTATE         0x14
 
+// UICooldownButton (TypeDefIndex: 202)
+#define OFFSET_UICB_INTERNALCOOLDOWN                  0xCC
+#define OFFSET_UICB_INTERACTABLEOVERRIDE              0x148
+#define OFFSET_UICB_INTERACTABLEOVERRIDEEVENINCOOLDOWN 0x149
+
 struct PlayerInfo {
     void* instance;
     bool isLocal;
@@ -316,6 +322,48 @@ jmethodID g_SetMapTouchTeleportMethod = NULL;
 
 bool g_ESPReady = false;
 
+// ObscuredFloat Şifreleme/Çözme Fonksiyonları
+int (*ObscuredFloat_Encrypt)(float value, int key) = NULL;
+float (*ObscuredFloat_Decrypt)(int value, int key) = NULL;
+
+void WriteObscuredFloat(uintptr_t addr, float val) {
+    if (!addr || !ObscuredFloat_Encrypt) return;
+    int key = *(int*)(addr + 0x0);
+    if (key == 0) {
+        key = 12345;
+        *(int*)(addr + 0x0) = key;
+    }
+    int enc = ObscuredFloat_Encrypt(val, key);
+    *(int*)(addr + 0x4) = enc;
+    *(bool*)(addr + 0xC) = true;
+    *(float*)(addr + 0x10) = val;
+    *(bool*)(addr + 0x14) = false;
+}
+
+float ReadObscuredFloat(uintptr_t addr) {
+    if (!addr || !ObscuredFloat_Decrypt) return 0.0f;
+    int key = *(int*)(addr + 0x0);
+    int val = *(int*)(addr + 0x4);
+    return ObscuredFloat_Decrypt(val, key);
+}
+
+// UICooldownButton.set_Cooldown - RVA: 0x39F06D4
+void (*old_UICooldownButton_set_Cooldown)(void* instance, void* value) = NULL;
+void hook_UICooldownButton_set_Cooldown(void* instance, void* value) {
+    if (NoButtonCooldown) {
+        if (value) WriteObscuredFloat((uintptr_t)value, 0.0f);
+        if (instance) {
+            WriteObscuredFloat((uintptr_t)instance + OFFSET_UICB_INTERNALCOOLDOWN, 0.0f);
+            *(bool*)((uintptr_t)instance + OFFSET_UICB_INTERACTABLEOVERRIDE) = true;
+            *(bool*)((uintptr_t)instance + OFFSET_UICB_INTERACTABLEOVERRIDEEVENINCOOLDOWN) = true;
+        }
+    }
+
+    if (old_UICooldownButton_set_Cooldown) {
+        old_UICooldownButton_set_Cooldown(instance, value);
+    }
+}
+
 // LocalPlayer.OverrideOrthographicSize - RVA: 0x3E559D4
 void (*OverrideOrthographicSize)(void*, float) = NULL;
 
@@ -357,8 +405,6 @@ void* (*PlayerPropertiesManager_GetUserProperties)(void*) = NULL;
 
 // MainManager.GetCurrentMap - RVA: 0x3ABD7A4
 uint8_t (*MainManager_GetCurrentMap)(void* instance) = NULL;
-
-// --- GÜNCEL VE KUSURSUZ ÇALIŞAN SKIN UNLOCK HOOKLARI ---
 
 // MainManager.Update - RVA: 0x3ABBE70
 void (*old_MainManager_Update)(void* instance) = NULL;
@@ -574,7 +620,7 @@ Vector2 GetPlayerPosition(void* instance, bool forLocal) {
     return pos;
 }
 
-// Orijinal ESP Ölçekleme Fonksiyonu (Drone View ile Senkronize)
+// Orijinal ESP Ölçekleme Fonksiyonu
 float GetESPScale() {
     float orthoSize = GetCurrentOrthoSize();
     if (orthoSize <= 0) orthoSize = 5.0f;
@@ -841,7 +887,6 @@ void SendMiniMapBatch(JNIEnv* env) {
         PlayerData* p = &g_RenderPlayers[i];
         if (!p->isValid) continue;
 
-        // Hayaletleri veya ölüleri bu döngüde atla (Gerçek cesetler deadBodies listesinden basılacak)
         if (p->isGhost || p->isDowned) continue;
 
         int colorId = GetPlayerColorId(p->instance);
@@ -857,7 +902,7 @@ void SendMiniMapBatch(JNIEnv* env) {
         offset += snprintf(g_MiniMapBatchBuffer + offset, sizeof(g_MiniMapBatchBuffer) - offset,
                            "%.1f,%.1f,%d,%d,%d,%s;",
                            p->position.x, p->position.y,
-                           0, // isDead = 0 (Canlı)
+                           0, // isDead = 0
                            p->isLocal ? 1 : 0,
                            colorId, safeName);
         if (offset >= sizeof(g_MiniMapBatchBuffer) - 100) break;
@@ -877,11 +922,9 @@ void SendMiniMapBatch(JNIEnv* env) {
                 void* bodyHandler = *(void**)((uintptr_t)bodyObj + 0x10);
                 if (!bodyHandler) continue;
 
-                // Sahnede gerçekten aktif mi? (0x54: bool colliderSpawned)
                 bool colliderSpawned = *(bool*)((uintptr_t)bodyHandler + 0x54);
                 if (!colliderSpawned) continue;
 
-                // BodyHandler.origin (Vector3 at 0x2C)
                 Vector3 originPos = *(Vector3*)((uintptr_t)bodyHandler + 0x2C);
                 if (originPos.x == 0.0f && originPos.y == 0.0f) continue;
 
@@ -890,7 +933,6 @@ void SendMiniMapBatch(JNIEnv* env) {
 
                 int bodyColorId = 0;
 
-                // Cesedin gerçek sahibini eşleştirerek rengini al
                 for (int pIdx = 0; pIdx < g_RenderPlayerCount; pIdx++) {
                     void* pInst = g_RenderPlayers[pIdx].instance;
                     if (!pInst) continue;
@@ -903,7 +945,6 @@ void SendMiniMapBatch(JNIEnv* env) {
                         break;
                     }
 
-                    // Alternatif: Ölen oyuncunun öldüğü yer ile ceset konumu 2 metre içindeyse eşleştir
                     if (g_RenderPlayers[pIdx].isGhost || g_RenderPlayers[pIdx].isDowned) {
                         float dist = hypotf(g_RenderPlayers[pIdx].killedLocation.x - originPos.x,
                                             g_RenderPlayers[pIdx].killedLocation.y - originPos.y);
@@ -964,7 +1005,7 @@ bool ClipLine(float* x1, float* y1, float* x2, float* y2) {
             x = *x1 + (*x2 - *x1) * (ymin - *y1) / (*y2 - *y1);
             y = ymin;
         } else if (outcodeOut & 2) {
-            y = *y1 + (*y2 - *x1) * (xmax - *x1) / (*x2 - *x1);
+            y = *y1 + (*y2 - *y1) * (xmax - *x1) / (*x2 - *x1);
             x = xmax;
         } else if (outcodeOut & 1) {
             y = *y1 + (*y2 - *y1) * (xmin - *x1) / (*x2 - *x1);
@@ -1307,7 +1348,7 @@ void RenderDebugPanelBatch() {
     snprintf(buf, sizeof(buf), "MainManager:%c | MapManager:%c | MapID:%d | RoomMap:%s", g_MainManager ? 'Y' : 'N', g_MapManager ? 'Y' : 'N', g_CurrentMapId, g_CurrentMapName);
     BatchAddText(centerX, startY, buf, COLOR_GOLD); startY += lineHeight;
 
-    snprintf(buf, sizeof(buf), "NoClip:%c | AutoReady:%c | UnlockSkins:%c", NoClip ? 'Y' : 'N', AutoReady ? 'Y' : 'N', UnlockAllSkins ? 'Y' : 'N');
+    snprintf(buf, sizeof(buf), "NoClip:%c | AutoReady:%c | UnlockSkins:%c | NoCooldown:%c", NoClip ? 'Y' : 'N', AutoReady ? 'Y' : 'N', UnlockAllSkins ? 'Y' : 'N', NoButtonCooldown ? 'Y' : 'N');
     BatchAddText(centerX, startY, buf, COLOR_CYAN); startY += lineHeight;
 
     RoleInfo myRole = GetRoleInfo(localPlayerRole);
@@ -1524,7 +1565,12 @@ void Update(void *instance) {
             g_LocalHasBomb = *(bool*)((uintptr_t)instance + OFFSET_PE_HASBOMB);
             GetKilledBy(instance, g_LocalKilledBy, sizeof(g_LocalKilledBy));
             if (old_get_deadPlayersCount) g_DeadPlayersCount = old_get_deadPlayersCount();
-            if (UnlimitedVision) *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
+
+            // Fog of War / Sınırsız Görüş
+            if (UnlimitedVision) {
+                *(bool*)((uintptr_t)instance + OFFSET_PE_FOGOFWAR) = false;
+            }
+
             if (NoClip) ApplyNoClip(instance, true);
             if (btnCallEmergency && PlayerController_CallEmergency) { PlayerController_CallEmergency(instance); btnCallEmergency = false; LOGI("Emergency called"); }
 
@@ -1559,7 +1605,7 @@ void GameManager_Update(void* instance) {
         isInLobby = (g_CurrentGameState <= 1);
         isInGame = (g_CurrentGameState >= 2);
 
-        // Lobiye dönüldüğünde haritayı kesin kapat
+        // Lobiye dönüldüğünde haritayı kapat
         if (isInLobby && s_LastMiniMapState) {
             s_LastMiniMapState = false;
             JNIEnv* env = GetJNIEnv();
@@ -1571,7 +1617,7 @@ void GameManager_Update(void* instance) {
         // 3 = Opening, 4 = Discussion, 5 = Voting, 6 = Waiting, 7 = Proceeding
         bool nowVoting = (g_CurrentGameState >= 3 && g_CurrentGameState <= 7);
 
-        // Toplantı bittiğinde haritadaki eski cesetleri anında temizle
+        // Toplantı bittiğinde haritadaki eski cesetleri temizle
         static bool s_PrevVoting = false;
         if (s_PrevVoting && !nowVoting) {
             JNIEnv* env = GetJNIEnv();
@@ -1600,19 +1646,6 @@ void TurnIntoGhost(void *instance, int deathReason) {
     old_TurnIntoGhost(instance, deathReason);
 }
 
-// PlayableEntity.Despawn - RVA: 0x3E62A98
-void (*old_Despawn)(void *instance);
-void Despawn(void *instance) {
-    if (instance) {
-        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
-        if (isLocal) {
-            if (NoClip) ApplyNoClip(instance, false);
-            ClearAllESP();
-        }
-    }
-    old_Despawn(instance);
-}
-
 // LocalPlayer.Update - RVA: 0x3E45778
 void (*old_LocalPlayer_Update)(void *instance);
 void LocalPlayer_Update(void *instance) {
@@ -1631,6 +1664,32 @@ void LocalPlayer_Update(void *instance) {
         isInSpotlightScreen = startSpotlight || endSpotlight;
         if (SeeGhosts && SetCanSeeGhosts) SetCanSeeGhosts(instance, true);
         if (DroneView && OverrideOrthographicSize) ApplyDroneViewDelayed();
+
+        // FogOfWar Tweakables (Tam Görüş)
+        if (UnlimitedVision) {
+            void* fow = *(void**)((uintptr_t)instance + 0x20); // LocalPlayer.fogOfWar
+            if (fow) {
+                WriteObscuredFloat((uintptr_t)fow + 0x90, 100.0f); // baseViewDistance
+                WriteObscuredFloat((uintptr_t)fow + 0xEC, 1.0f);   // viewDistanceMultiplier
+                WriteObscuredFloat((uintptr_t)fow + 0xD0, 750.0f);  // flashLightLerpSpeed
+            }
+        }
+
+        // Hız Değişimi (LocalPlayer.movementSpeed ve BaseMovementSpeed)
+        uintptr_t klass = *(uintptr_t*)instance;
+        if (klass) {
+            uintptr_t static_fields = *(uintptr_t*)(klass + 0xB8);
+            if (static_fields) {
+                float baseSpeed = *(float*)(static_fields + 0x24);
+                if (baseSpeed > 0.0f) {
+                    if (SpeedHack) {
+                        WriteObscuredFloat(static_fields + 0x28, baseSpeed * SpeedMultiplier);
+                    } else {
+                        WriteObscuredFloat(static_fields + 0x28, baseSpeed);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1679,6 +1738,19 @@ void OnExitVent(void *instance, void* vent, bool setCooldown) { old_OnExitVent(i
 // GGDRole.SetVentCooldown - RVA: 0x3CDD808
 void (*old_SetVentCooldown)(void *instance, int startCooldown);
 void SetVentCooldown(void *instance, int startCooldown) { old_SetVentCooldown(instance, NoCooldown ? 0 : startCooldown); }
+
+// PlayableEntity.Despawn - RVA: 0x3E62A98
+void (*old_Despawn)(void *instance);
+void Despawn(void *instance) {
+    if (instance) {
+        bool isLocal = *(bool*)((uintptr_t)instance + OFFSET_PE_ISLOCAL);
+        if (isLocal) {
+            if (NoClip) ApplyNoClip(instance, false);
+            ClearAllESP();
+        }
+    }
+    old_Despawn(instance);
+}
 
 // TasksHandler.OnEnable - RVA: 0x3E3A3D8
 void (*old_TasksHandler_OnEnable)(void* instance);
@@ -1741,6 +1813,7 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Toggle_[\uE220]Unlimited Vision"),
             OBFUSCATE("Toggle_[\uE2C4]Remove Roof"),
             OBFUSCATE("Toggle_[\uE492]No Vent Cooldown"),
+            OBFUSCATE("Toggle_[\uE492]No Button Cooldown"),
             OBFUSCATE("Toggle_[\uE62A]See Ghosts"),
 
             OBFUSCATE("Category_[\uE730]Movement"),
@@ -1781,14 +1854,14 @@ jobjectArray GetFeatureList(JNIEnv *env, jobject context) {
             OBFUSCATE("Toggle_True_[\uE2C4]Unlock All Skins [BETA]"),
             OBFUSCATE("Button_[\uE0CE]Call Emergency"),
             OBFUSCATE("Toggle_[\uE186]Auto Ready (Lobby)"),
+            OBFUSCATE("Toggle_[\uE628]Speed Boost"),
+            OBFUSCATE("SeekBar_[\uE434]Speed Multiplier_10_40"),
 
             OBFUSCATE("Category_[\uE5F4]Debug Panel"),
             OBFUSCATE("Toggle_[\uE2CE]Show Debug Info"),
 
             OBFUSCATE("Category_[\uE79E]Experimental [May Not Work]"),
             OBFUSCATE("Toggle_[\uE40A]Anti-Death [LOCAL]"),
-            OBFUSCATE("Toggle_[\uE628]Speed Boost [LOCAL]"),
-            OBFUSCATE("SeekBar_[\uE434]Speed Multiplier_10_40"),
 
             OBFUSCATE("Category_[\uE46A]About"),
             OBFUSCATE("RichTextView_[\uE348]<b>Goose Goose Duck Mod Menu</b><br/>Free and open source mod for Android.<br/>Use at your own risk!"),
@@ -1808,55 +1881,56 @@ void Changes(JNIEnv *env, jclass clazz, jobject obj, jint featNum, jstring featN
         case 0: UnlimitedVision = boolean; if (!boolean && localPlayerInstance) *(bool*)((uintptr_t)localPlayerInstance + OFFSET_PE_FOGOFWAR) = true; break;
         case 1: RemoveRoof = boolean; if (boolean && g_RoofHandler && RoofHandler_DeactivateRoofs && !g_RoofRemovedThisRound) { RoofHandler_DeactivateRoofs(g_RoofHandler, true); g_RoofRemovedThisRound = true; } else if (!boolean && g_RoofHandler && RoofHandler_DeactivateRoofs) { RoofHandler_DeactivateRoofs(g_RoofHandler, false); g_RoofRemovedThisRound = false; } break;
         case 2: NoCooldown = boolean; break;
-        case 3: SeeGhosts = boolean; if (!boolean && localPlayerObject && SetCanSeeGhosts) SetCanSeeGhosts(localPlayerObject, false); break;
-        case 4: NoClip = boolean; if (localPlayerInstance) ApplyNoClip(localPlayerInstance, boolean); break;
-        case 5: DroneView = boolean; if (!boolean) DisableDroneView(); else ResetDroneViewDelay(); break;
-        case 6: DroneZoom = (float)value; if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize) OverrideOrthographicSize(localPlayerObject, DroneZoom); break;
-        case 7: ESPEnabled = boolean; if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; } SetESPEnabled(boolean || DebugMode); break;
-        case 8: ESPLines = boolean; break;
-        case 9: ESPBox = boolean; break;
-        case 10: ESPDistance = boolean; break;
-        case 11: ESPName = boolean; break;
-        case 12: ESPEdgeIndicator = boolean; break;
-        case 13: ESPHideInVote = boolean; break;
-        case 14: ESPHideInLobby = boolean; break;
+        case 3: NoButtonCooldown = boolean; break;
+        case 4: SeeGhosts = boolean; if (!boolean && localPlayerObject && SetCanSeeGhosts) SetCanSeeGhosts(localPlayerObject, false); break;
+        case 5: NoClip = boolean; if (localPlayerInstance) ApplyNoClip(localPlayerInstance, boolean); break;
+        case 6: DroneView = boolean; if (!boolean) DisableDroneView(); else ResetDroneViewDelay(); break;
+        case 7: DroneZoom = (float)value; if (DroneView && g_DroneViewReady && localPlayerObject && OverrideOrthographicSize) OverrideOrthographicSize(localPlayerObject, DroneZoom); break;
+        case 8: ESPEnabled = boolean; if (boolean) { g_ESPStabilized = false; g_FrameCount = 0; } SetESPEnabled(boolean || DebugMode); break;
+        case 9: ESPLines = boolean; break;
+        case 10: ESPBox = boolean; break;
+        case 11: ESPDistance = boolean; break;
+        case 12: ESPName = boolean; break;
+        case 13: ESPEdgeIndicator = boolean; break;
+        case 14: ESPHideInVote = boolean; break;
+        case 15: ESPHideInLobby = boolean; break;
 
-        case 15:
+        case 16:
             MiniMapEnabled = boolean;
             if (env && g_SetMiniMapVisibleMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMiniMapVisibleMethod, (jboolean)boolean);
             break;
-        case 16:
+        case 17:
             MiniMapShowPlayers = boolean;
             if (env && g_SetMapShowPlayersMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMapShowPlayersMethod, (jboolean)boolean);
             break;
-        case 17:
+        case 18:
             MiniMapShowDead = boolean;
             if (env && g_SetMapShowDeadBodiesMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMapShowDeadBodiesMethod, (jboolean)boolean);
             break;
-        case 18:
+        case 19:
             MiniMapTouchTP = boolean;
             if (env && g_SetMapTouchTeleportMethod) env->CallStaticVoidMethod(g_MenuClass, g_SetMapTouchTeleportMethod, (jboolean)boolean);
             break;
-        case 19:
+        case 20:
             MiniMapHideInVote = boolean;
             break;
 
-        case 20: HearDeadVoice = boolean; break;
-        case 21: HearFarPlayers = boolean; break;
+        case 21: HearDeadVoice = boolean; break;
+        case 22: HearFarPlayers = boolean; break;
 
-        case 22: btnUnlockSabotages = true; break;
-        case 23: AutoRepairSabotage = boolean; break;
-        case 24: btnRepairSabotageNow = true; break;
-        case 25: SafeAutoTasks = boolean; if (boolean) g_LastSafeTaskTime = std::chrono::steady_clock::now(); break;
-        case 26: btnCompleteOneTask = true; break;
+        case 23: btnUnlockSabotages = true; break;
+        case 24: AutoRepairSabotage = boolean; break;
+        case 25: btnRepairSabotageNow = true; break;
+        case 26: SafeAutoTasks = boolean; if (boolean) g_LastSafeTaskTime = std::chrono::steady_clock::now(); break;
+        case 27: btnCompleteOneTask = true; break;
 
-        case 27: UnlockAllSkins = boolean; break;
-        case 28: btnCallEmergency = true; break;
-        case 29: AutoReady = boolean; break;
-        case 30: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
-        case 31: AntiDeath = boolean; break;
-        case 32: SpeedHack = boolean; break;
-        case 33: SpeedMultiplier = (float)value / 10.0f; break;
+        case 28: UnlockAllSkins = boolean; break;
+        case 29: btnCallEmergency = true; break;
+        case 30: AutoReady = boolean; break;
+        case 31: SpeedHack = boolean; break;
+        case 32: SpeedMultiplier = (float)value / 10.0f; break;
+        case 33: DebugMode = boolean; SetESPEnabled(boolean || ESPEnabled); break;
+        case 34: AntiDeath = boolean; break;
     }
 }
 
@@ -1874,6 +1948,13 @@ void hack_thread() {
     }
 
 #if defined(__aarch64__)
+    // ObscuredFloat Metotları
+    ObscuredFloat_Encrypt = (int (*)(float, int))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x369ACAC")));
+    ObscuredFloat_Decrypt = (float (*)(int, int))getAbsoluteAddress(targetLibName, str2Offset(OBFUSCATE("0x369ACFC")));
+
+    // UICooldownButton Hook
+    HOOK(targetLibName, str2Offset(OBFUSCATE("0x39F06D4")), hook_UICooldownButton_set_Cooldown, old_UICooldownButton_set_Cooldown);
+
     // GameManager.Update - RVA: 0x3AE8478
     HOOK(targetLibName, str2Offset(OBFUSCATE("0x3AE8478")), GameManager_Update, old_GameManager_Update);
 
